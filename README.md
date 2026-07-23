@@ -57,21 +57,19 @@ O MVP cobre **só o retângulo do deck FIXO** (X ≈ −1,015…0,05 m).
 ```text
         +Y
          ^
-  TL ●────────────────┐
-     │   DECK FIXO    │     ║ limiar X=0,105
-  TR ●────────────────● FR  ║→ EXTENSÃO (móvel, sem sensor)
-     X=-1,015      X=0,05    X≥0,105
+  TL ●─────┐
+     │ tras.│     ║ limiar X=0,105 → EXTENSÃO (sem sensor)
+  TR ●──●──┘ LR
+     X=-1,015  X=-0,53
 ```
 
-| ID | Canto | Pose (m) |
-|----|-------|----------|
-| `SENSOR_TRASEIRA_L` | Traseira +Y | `(-1,015, +0,355, 2,16)` |
-| `SENSOR_TRASEIRA_R` | Traseira −Y | `(-1,015, −0,355, 2,16)` |
-| `SENSOR_FRENTE_R` | Dianteiro do **fixo** no rail −Y | `(+0,050, −0,355, 2,16)` |
+| ID | Onde | Pose (m) |
+|----|------|----------|
+| `SENSOR_TRASEIRA_L` | Canto traseiro +Y | `(-1,015, +0,355, 2,16)` |
+| `SENSOR_TRASEIRA_R` | Canto traseiro −Y | `(-1,015, −0,355, 2,16)` |
+| `SENSOR_LATERAL_R` | Poste rail −Y (terço traseiro) | `(-0,533, −0,355, 2,16)` |
 
-> Com a extensão **recolhida**, `X≈0,05` parece perto do meio do comprimento total da máquina (−1…+1). Estruturalmente é o **fim do fixo**; a peça móvel começa em `X≥0,105` (placa âmbar + limiar no Blender).
-
-Rebuild: `scripts/rebuild_sensor_corners.py`
+Todos com `X ≤ -0,50` — **nada no limiar** da extensão. Rebuild: `scripts/rebuild_sensor_corners.py`
 
 ---
 
@@ -155,15 +153,15 @@ Braço/ferramenta no FoV pode parecer obstáculo.
 
 ### 3) Cobertura do volume do cesto
 
-**Disposição:** 3 cantos do **retângulo fixo** (FoV ~27° para cima; ToF eixo = +Z):
+**Disposição:** 3 sensores só na **traseira** do deck fixo (longe do limiar da extensão):
 
-| Sensor | Canto do fixo | Pose `(X, Y, Z)` m |
-|--------|---------------|-------------------|
-| `SENSOR_TRASEIRA_L` | Traseira +Y | `(-1,015, +0,355, 2,16)` |
-| `SENSOR_TRASEIRA_R` | Traseira −Y | `(-1,015, −0,355, 2,16)` |
-| `SENSOR_FRENTE_R` | Dianteiro fixo −Y | `(+0,050, −0,355, 2,16)` |
+| Sensor | Onde | Pose `(X, Y, Z)` m |
+|--------|------|-------------------|
+| `SENSOR_TRASEIRA_L` | Canto traseiro +Y | `(-1,015, +0,355, 2,16)` |
+| `SENSOR_TRASEIRA_R` | Canto traseiro −Y | `(-1,015, −0,355, 2,16)` |
+| `SENSOR_LATERAL_R` | Poste rail −Y | `(-0,533, −0,355, 2,16)` |
 
-Apontamento: ~8° ao centro do deck fixo. Script: `scripts/rebuild_sensor_corners.py`.
+Apontamento: ~8° ao centro da zona traseira. Script: `scripts/rebuild_sensor_corners.py`.
 
 ### 4) Ultrassônico × ToF
 
@@ -216,7 +214,7 @@ O diagrama *“SafeAlert MVP — Arranjo Fictício na Protoboard”* está **con
 |-------|-----------|
 | **ESP32-S3 DevKit** | Adequado como controlador do MVP |
 | **TCA9548A** | Solução correta: os 3× VL53L1X compartilham o mesmo endereço I2C |
-| **S1 / S2 / S3** (3 cantos do retângulo fixo) | Traseira L/R + Frente R do fixo |
+| **S1 / S2 / S3** (traseira fixa) | Traseira L/R + Lateral R — longe da extensão |
 | **3V3 para mux/sensores e 5V para buzzer/relé** | Separação de trilhos coerente |
 | **LEDs (verde / amarelo / vermelho / azul)** + **220 Ω** | Indicadores de estado claros para demonstração |
 | **Buzzer via 2N2222 + 1 kΩ** | Evita sobrecarregar o GPIO do ESP32 |
@@ -368,7 +366,7 @@ Se estourar o teto: use **ESP32-WROOM-32 DevKit** (~R$ 35–50) no lugar do S3.
            |
     ┌──────┼──────────────┐
   ToF S1          ToF S2          ToF S3
-  Traseira L      Traseira R      Frente R (fixo)
+  Traseira L      Traseira R      Lateral R (poste)
 ```
 
 **Notas:** I2C não gosta de cabo longo — use Cat6, clock baixo (~50 kHz) e GND comum 3V3/5V. O firmware atual ainda lê HC-SR04 por GPIO; a porta para VL53L1X+TCA9548A está no roadmap. Cabos só no rail do **deck fixo**, com **laço de folga** — estender o roll-out não puxa a instalação MVP.
@@ -413,9 +411,9 @@ Se estourar o teto: use **ESP32-WROOM-32 DevKit** (~R$ 35–50) no lugar do S3.
 | `Volume_ToF_Vermelho_*` | **1,2 m** | vermelho | aperto + buzzer — ainda sobe |
 | `Volume_ToF_Bloqueio_*` | **0,6 m** | azul | **bloqueio** (iminente) |
 
-Empties (cantos do fixo, `X ≤ 0,05`):
+Empties (traseira fixa, `X ≤ -0,50`):
 
-- `corner` = `Traseira_L` | `Traseira_R` | `Frente_R_Fixo`
+- `corner` = `Traseira_L` | `Traseira_R` | `Lateral_R`
 
 ---
 

@@ -15,15 +15,11 @@ GEOMETRIA BLENDER (SJIII 3226):
   Top rail Z ≈ 2.16 m
   Postes nos cantos: (±1.015, ±0.355) e intermediários
 
-DISPOSIÇÃO (3 CANTOS do retângulo FIXO — não do comprimento total da máquina):
+DISPOSIÇÃO (3 pontos só na TRASEIRA do deck FIXO — longe do limiar X=0.105):
   S0 Traseira_L : (-1.015, +0.355)  canto traseiro +Y
   S1 Traseira_R : (-1.015, -0.355)  canto traseiro -Y
-  S2 Frente_R   : (+0.050, -0.355)  canto DIANTEIRO do FIXO no rail -Y
-                  (oposto ao painel de controle em +Y; NÃO é o miolo do cesto)
-
-Nota: no rail completo (extensão recolhida) X=0.05 parece “meio” do comprimento
-total (−1‥+1). Estruturalmente é o LIMITE do fixo; a extensão começa em 0.105.
-Marcamos a zona de extensão no Blender para deixar isso explícito.
+  S2 Lateral_R  : (-0.533, -0.355)  poste no rail -Y (terço traseiro)
+                  Longe da junta fixo/extensão; extensão pode abrir livre.
 
 Eixo óptico ToF = local +Z. US legado = local +X (meshes antigos).
 """
@@ -40,17 +36,19 @@ YOFF = 4.5
 TOP_Z = 2.16
 EXT_X0 = 0.105
 FOV_TOF = 27.0
-FIXED_X_MAX = 0.050  # último X permitido para sensor (limiar do fixo)
+# Limite duro: sensores longe do limiar da extensão (X=0.105)
+# Terceiro sensor no poste Post_3 / Post_2 (X≈-0.533), NÃO no limiar.
+X_SENSOR_MAX = -0.50
 
-# Centro do retângulo FIXO (para leve convergência do FoV)
-CX = (-1.015 + FIXED_X_MAX) * 0.5  # ≈ -0.4825
+# Centro da zona instrumentada (traseira do fixo)
+CX = -0.774
 CY = 0.0
 
 # (id_legado, nome_doc, pos_local_US)
 SENSORS = [
     ("Esquerdo", "Traseira_L", Vector((-1.015, 0.355, TOP_Z))),
     ("Central", "Traseira_R", Vector((-1.015, -0.355, TOP_Z))),
-    ("Direito", "Frente_R_Fixo", Vector((FIXED_X_MAX, -0.355, TOP_Z))),
+    ("Direito", "Lateral_R", Vector((-0.533, -0.355, TOP_Z))),  # poste traseiro, rail -Y
 ]
 
 TOF_LAYERS = [
@@ -194,7 +192,7 @@ def rebuild_tof():
 
     print("=== REBUILD ToF (3 cantos do FIXO) ===")
     for old, label, pos in SENSORS:
-        assert pos.x <= FIXED_X_MAX + 1e-6, pos
+        assert pos.x <= X_SENSOR_MAX + 1e-6, pos
         assert pos.x < EXT_X0, pos
         world = pos + Vector((0, YOFF, 0))
         direction = aim_up_to_fixed_center(pos.x, pos.y)
@@ -284,7 +282,7 @@ def rebuild_tof():
             p0 = B + Vector((offs, 0, 0))
             p_slack = B + Vector((offs, -0.12, 0.10))  # folga
             # sobe para rail +Y (lado do painel) sem entrar na extensão
-            p_up = Vector((min(B.x, FIXED_X_MAX - 0.05), y_plus + 0.025, rail_z))
+            p_up = Vector((min(B.x, -0.40), y_plus + 0.025, rail_z))
             pts = [p0, p_slack, p_up]
             if old == "Esquerdo":
                 pts += [
@@ -299,17 +297,18 @@ def rebuild_tof():
                     tgt + Vector((0.04, -0.04, -0.02)),
                     tgt + Vector((0, 0, -0.015)),
                 ]
-            else:  # Frente_R_Fixo em (-Y)
+            else:  # Lateral_R em X=-0.533, Y=-
                 pts += [
-                    Vector((FIXED_X_MAX, y_plus + 0.025, rail_z)),
-                    Vector((FIXED_X_MAX, y_minus - 0.025, rail_z)),
-                    tgt + Vector((-0.04, -0.04, -0.02)),
+                    Vector((-1.015, y_plus + 0.025, rail_z)),
+                    Vector((-1.015, y_minus - 0.025, rail_z)),
+                    Vector((-0.533, y_minus - 0.025, rail_z)),
+                    tgt + Vector((0.04, -0.04, -0.02)),
                     tgt + Vector((0, 0, -0.015)),
                 ]
-            # nenhum ponto de cabo com X > FIXED_X_MAX (não invade extensão)
+            # nenhum ponto de cabo invade a extensão
             for p in pts:
-                if p.x > FIXED_X_MAX + 0.02:
-                    p.x = FIXED_X_MAX
+                if p.x > X_SENSOR_MAX + 0.05:
+                    p.x = X_SENSOR_MAX
             cd = bpy.data.curves.new(f"MVP_Cabo_{old}_d", "CURVE")
             cd.dimensions = "3D"
             cd.bevel_depth = 0.0045
@@ -383,7 +382,7 @@ def main():
         assert s.dimensions.x < 0.08
         z = g.matrix_world.to_3x3() @ Vector((0, 0, 1))
         assert z.z > 0.95, z
-    print("SANITY_PASS: 3 cantos do retângulo FIXO")
+    print("SANITY_PASS: 3 sensores na traseira fixa (longe do limiar)")
 
 
 if __name__ == "__main__":
