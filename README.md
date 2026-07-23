@@ -2,7 +2,7 @@
 
 Projeto de visualização 3D + lógica embarcada para um sistema de **detecção de obstáculos acima do cesto** em plataforma elevatória tipo tesoura, inspirado nas dimensões da **Skyjack SJIII 3226**.
 
-O foco é um projeto de **estudo e prototipagem**: sensores no **topo do guarda-corpo**, apontando para **cima**, comunicando com um **ESP32** que sinaliza faixas de risco e pode **bloquear a subida**.
+O foco é um projeto de **prototipagem**: sensores no **topo do guarda-corpo**, apontando para **cima**, comunicando com um **ESP32** que sinaliza faixas de risco e pode **bloquear a subida**.
 
 > **Premissa do projeto:** o desafio principal é **geométrico** (onde apontar, o que o FoV enxerga, como cobrir o volume do cesto sem confundir parede/operador). A montagem eletrônica é viável e relativamente direta — ver o arranjo SafeAlert MVP abaixo.
 
@@ -193,7 +193,21 @@ O diagrama *“SafeAlert MVP — Arranjo Fictício na Protoboard”* está **con
 2. **Módulo relé SRD** — muitos são ativos em nível baixo e já trazem optoacoplador; confirme se o `IN` aceita 3,3 V do ESP32-S3.  
 3. **Pull-ups I2C** — placa do TCA9548A costuma já ter; evite empilhar pull-ups demais em cada breakout VL53.  
 4. **XSHUT (roxo no diagrama)** — com mux, não é obrigatório para multiplexar, mas ajuda a resetar sensores individualmente.  
-5. **Fail-safe** — no produto real, falta de sensor/energia deve **impedir subida** (estado seguro), não liberar.
+5. **Fail-safe de software (MVP)** — se leituras esperadas caírem, o firmware tende a bloquear; no produto real isso precisa ser **arquitetural** (energia, canal, feedback), não só um `if` no loop.
+
+### Limites elétricos e de norma (protótipo ≠ produto)
+
+Este MVP **reconhece** os cuidados básicos de interface (transistor no buzzer, relé a contatos secos, trilhos 3V3/5V). Isso **não** é projeto de segurança funcional de MEWP. De forma deliberada e explícita:
+
+| Tema | Neste protótipo | O que um produto real exigiria |
+|------|-----------------|--------------------------------|
+| **Isolamento galvânico** | Relé com opto no módulo SRD isola *parcialmente* a bobina do GPIO; **não** há barreira projetada entre lógica, alimentação da máquina e I/O de segurança | Isolamento / barreira conforme categoria elétrica; interface à máquina tipicamente via contatos secos **ou** I/O de segurança certificado, sem partilhar GND de potência com a lógica do sensor |
+| **Categoria / desempenho** | Canal único ESP32 + sensores | Avaliação **SIL** (IEC 61508) e/ou **PL** (ISO 13849); arquitetura adequada (ex.: PLd/SIL2 conforme análise de risco) |
+| **Norma de plataforma** | Fora de escopo | Requisitos de segurança de MEWP (**EN 280** / equivalentes) e integração com o sistema de controle do fabricante |
+| **Redundância de canal** | Um MCU, um mux I2C, um relé | Dois canais independentes (ou canal + diagnóstico contínuo), comparação cruzada, falha → **estado seguro** (impedir subida) |
+| **Diagnóstico** | Botões ACK / teste diário (conceito) | Autoteste periódico, watchdog, detecção de sensor preso/aberto, monitoração do atuador |
+
+**Escopo:** estes tópicos entram no roadmap de um produto; o protótipo atual prioriza geometria de cobertura e demonstração de bloqueio. Relé na protoboard **não** é função de segurança certificada.
 
 ### Mapeamento sugerido de estados (LEDs do diagrama)
 
@@ -357,7 +371,8 @@ Valores iguais a `config.h` (única tabela vigente — **não** use 6,0 / 3,5 / 
 
 Histerese de liberação: **0,75 m** (`DIST_LIBERA_BLOQUEIO_M`).
 
-> **Aviso:** este é um protótipo de estudo. Sistema de segurança real em MEWP exige redundância, validação normativa e projeto fail-safe adequado — não substitua proteções certificadas do fabricante.
+> **Aviso:** este é um **protótipo de desenvolvimento**. Não substitui proteções certificadas do fabricante.  
+> Produto real em MEWP exige, no mínimo: análise de risco, **SIL/PL**, conformidade com **EN 280** (ou equivalente), **redundância / diagnóstico de canal** e isolamento adequado na interface com a máquina — ver seção *Limites elétricos e de norma*.
 
 ---
 
@@ -405,6 +420,7 @@ Histerese de liberação: **0,75 m** (`DIST_LIBERA_BLOQUEIO_M`).
 - [ ] Autoteste diário + ACK no firmware  
 - [ ] Ensaios de FoV junto à fachada (validar envelope)  
 - [ ] Multilateração só para alvos pontuais compartilhados (opcional)  
+- [ ] *(Produto, fora do MVP)* Esboço de arquitetura dual-channel + isolamento na interface de bloqueio; mapear requisitos EN 280 / ISO 13849
 
 ---
 
@@ -414,9 +430,11 @@ Histerese de liberação: **0,75 m** (`DIST_LIBERA_BLOQUEIO_M`).
 - HC-SR04: ângulo útil típico ~15° (effectual); envelope ~30°  
 - ST VL53L1X: FoV diagonal típico ~27° (ROI programável 15–27°)  
 - TCA9548A: multiplexador I2C para sensores de mesmo endereço  
+- **EN 280** — Mobile elevating work platforms (requisitos de segurança)  
+- **ISO 13849** / **IEC 61508** — Performance Level (PL) / Safety Integrity Level (SIL)
 
 ---
 
 ## Licença / uso
 
-Projeto de **estudo e prototipagem** sob **GPLv3** (`LICENSE`). O modelo 3D e o firmware são fornecidos para aprendizado e desenvolvimento. Não utilizar como único meio de proteção em operação real sem validação de segurança.
+Projeto de **prototipagem** sob **GPLv3** (`LICENSE`). O modelo 3D e o firmware são fornecidos para desenvolvimento e experimentação. Não utilizar como único meio de proteção em operação real sem validação de segurança.
