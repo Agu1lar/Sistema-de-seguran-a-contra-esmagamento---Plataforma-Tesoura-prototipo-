@@ -189,11 +189,29 @@ O diagrama *“SafeAlert MVP — Arranjo Fictício na Protoboard”* está **con
 
 ### Atenções práticas (não invalidam o desenho)
 
-1. **Alcance do VL53L1X** — típico até ~**4 m**. O envelope 3D externo usa 4 m; as faixas de alerta/bloqueio (2,5 / 1,2 / 0,6 m) cabem dentro desse alcance.  
+1. **Alcance do VL53L1X** — típico até ~**4 m** em condições favoráveis (indoor / sem IR solar forte). O envelope 3D externo usa 4 m; as faixas de alerta/bloqueio (2,5 / 1,2 / 0,6 m) cabem nesse alcance **nominal**. Em sol direto o alcance útil cai — ver *Luz solar / 940 nm* abaixo.  
 2. **Módulo relé SRD** — muitos são ativos em nível baixo e já trazem optoacoplador; confirme se o `IN` aceita 3,3 V do ESP32-S3.  
 3. **Pull-ups I2C** — placa do TCA9548A costuma já ter; evite empilhar pull-ups demais em cada breakout VL53.  
 4. **XSHUT (roxo no diagrama)** — com mux, não é obrigatório para multiplexar, mas ajuda a resetar sensores individualmente.  
 5. **Fail-safe de software (MVP)** — se leituras esperadas caírem, o firmware tende a bloquear; no produto real isso precisa ser **arquitetural** (energia, canal, feedback), não só um `if` no loop.
+
+### Luz solar / 940 nm (limite óptico outdoor)
+
+O VL53L1X emite e mede em **~940 nm** (VCSEL + SPADs). A luz solar direta também carrega muita energia nessa faixa. Em uso **outdoor sob sol forte**, o IR ambiente satura o receptor: a SNR cai e o alcance útil pode despencar de ~**4 m** para ~**1 m ou menos**, com leituras ruidosas ou status de falha (`SignalFail` / range inválido). Isso é física do sensor, não bug do firmware.
+
+**Filtro óptico ajuda?** Em parte, e com nuance:
+
+| Abordagem | O que faz | Limite |
+|-----------|-----------|--------|
+| **Filtro passa-banda 940 nm** (já existe *dentro* do pacote ST; externo opcional) | Rejeita luz fora da banda (visível, outras lâmpadas) | O **sol também emite em 940 nm** — o filtro *passa* esse ruído. Ajuda pouco contra sol direto no FoV |
+| **Capuz / rebaixo mecânico / sombra** | Reduz sol direto no receptor e no alvo iluminado | Mais eficaz na prática que “só filtro” |
+| **Distance mode Short** (API ST) | Melhor imunidade a luz ambiente | Alcance típico limitado (~**1,3 m**) — útil perto do bloqueio, ruim para faixa amarela 2,5 m |
+| **Timing budget / status / ambient rate** | Descartar leituras inválidas; não confiar em distância “fantasma” | Sem fail-safe, ruído vira falso livre ou falso alarme |
+| **Sensor outdoor mais robusto** (ex. famílias com mais SPADs, p.ex. VL53L8CX) | Melhor margem sob sol | Custo e redesign do FoV |
+
+Neste protótipo os sensores apontam **para cima** (teto / estrutura acima do cesto). Isso é o pior caso geométrico sob céu aberto: céu/sol no FoV. Ensaios de campo devem incluir **sol a pino**, sombra e interior.
+
+**Regra de projeto:** leitura inválida ou ambient saturado → tratar como **ameaça / bloquear subida** (estado seguro), nunca como “livre”. Filtro externo pode ser experimento de hardware; **não** contar com ele para recuperar os 4 m sob sol.
 
 ### Limites elétricos e de norma (protótipo ≠ produto)
 
@@ -419,6 +437,7 @@ Histerese de liberação: **0,75 m** (`DIST_LIBERA_BLOQUEIO_M`).
 - [ ] Entrada real de elevação da tesoura (encoder) para fortalecer \(\Delta r\) vs \(\Delta h\)  
 - [ ] Autoteste diário + ACK no firmware  
 - [ ] Ensaios de FoV junto à fachada (validar envelope)  
+- [ ] Ensaios sob **sol direto** vs sombra: status/ambient do VL53L1X, alcance útil real, capuz mecânico (± filtro 940 nm externo como experimento)  
 - [ ] Multilateração só para alvos pontuais compartilhados (opcional)  
 - [ ] *(Produto, fora do MVP)* Esboço de arquitetura dual-channel + isolamento na interface de bloqueio; mapear requisitos EN 280 / ISO 13849
 
@@ -428,7 +447,7 @@ Histerese de liberação: **0,75 m** (`DIST_LIBERA_BLOQUEIO_M`).
 
 - Dimensões Skyjack SJIII 3226 (especificação do fabricante)  
 - HC-SR04: ângulo útil típico ~15° (effectual); envelope ~30°  
-- ST VL53L1X: FoV diagonal típico ~27° (ROI programável 15–27°)  
+- ST VL53L1X: FoV diagonal típico ~27° (ROI programável 15–27°); desempenho outdoor limitado por IR solar em ~940 nm  
 - TCA9548A: multiplexador I2C para sensores de mesmo endereço  
 - **EN 280** — Mobile elevating work platforms (requisitos de segurança)  
 - **ISO 13849** / **IEC 61508** — Performance Level (PL) / Safety Integrity Level (SIL)
