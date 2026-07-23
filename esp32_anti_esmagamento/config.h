@@ -46,14 +46,19 @@ enum SensorId {
 };
 
 // --- Geometria do cesto (metros) — alinhada ao modelo SJIII 3226 ---
-static const float CESTO_SEMI_L_M    = 1.065f;
-static const float CESTO_SEMI_W_M    = 0.355f;
-static const float TOPO_RAIL_Z_M     = 2.16f;
-static const float MARGEM_ENVELOPE_M = 0.15f;
+// Escopo MVP: só o DECK PRINCIPAL (fixo). A extensão roll-out (~+X,
+// X ≳ 0,105 m) fica FORA da cobertura — o operador pode estender o
+// deck sem mover sensores nem alterar a lógica de FoV do protótipo.
+static const float CESTO_SEMI_L_M       = 1.065f;  // semi-comprimento total (ref. OEM)
+static const float CESTO_SEMI_W_M       = 0.355f;
+static const float EXTENSAO_X_INICIO_M  = 0.105f;  // início da zona roll-out (+X)
+static const float TOPO_RAIL_Z_M        = 2.16f;
+static const float MARGEM_ENVELOPE_M    = 0.15f;
 
 static const float ENVELOPE_Z_MIN_M = TOPO_RAIL_Z_M;
 static const float ENVELOPE_X_MIN_M = -(CESTO_SEMI_L_M + MARGEM_ENVELOPE_M);
-static const float ENVELOPE_X_MAX_M =  (CESTO_SEMI_L_M + MARGEM_ENVELOPE_M);
+// Envelope de colisão PARA no limiar da extensão (não cobre o roll-out)
+static const float ENVELOPE_X_MAX_M =  (EXTENSAO_X_INICIO_M + MARGEM_ENVELOPE_M);
 static const float ENVELOPE_Y_MIN_M = -(CESTO_SEMI_W_M + MARGEM_ENVELOPE_M);
 static const float ENVELOPE_Y_MAX_M =  (CESTO_SEMI_W_M + MARGEM_ENVELOPE_M);
 
@@ -70,20 +75,22 @@ struct Vec3 {
   float x, y, z;
 };
 
+// Poses no DECK FIXO apenas (nenhum sensor em X ≥ EXTENSAO_X_INICIO_M).
+// SENSOR_PONTA_B fica na borda dianteira do principal (~0,05 m), não na ponta da extensão.
 static const Vec3 SENSOR_POS[NUM_SENSORES] = {
-  { -1.015f,  0.355f, TOPO_RAIL_Z_M },
-  {  0.000f, -0.355f, TOPO_RAIL_Z_M },
-  {  1.015f,  0.000f, TOPO_RAIL_Z_M }
+  { -1.015f,  0.355f, TOPO_RAIL_Z_M },  // ponta traseira (fixo)
+  {  0.000f, -0.355f, TOPO_RAIL_Z_M },  // meio (fixo)
+  {  0.050f,  0.000f, TOPO_RAIL_Z_M }   // dianteiro no limiar do fixo (antes do roll-out)
 };
 
-// Apontamento otimizado p/ cobertura do volume do cesto (FoV ~27°):
+// Apontamento p/ cobertura do volume do cesto PRINCIPAL (FoV ~27°):
 // - Meio: ~10° para dentro (+Y)
-// - Pontas: ~9° para dentro + leve convergência longitudinal (~6°)
-// (7° só nas pontas e meio a 0° subcobria o cesto em 1,5–2,0 m)
+// - Traseira: ~9° para dentro + leve convergência
+// - Dianteiro (fixo): quase vertical — não “caça” a extensão
 static const Vec3 SENSOR_DIR[NUM_SENSORES] = {
-  {  0.1045f, -0.1564f, 0.9821f },  // ponta A
+  {  0.1045f, -0.1564f, 0.9821f },  // ponta A (traseira)
   {  0.0000f,  0.1736f, 0.9848f },  // meio
-  { -0.1564f,  0.0000f, 0.9877f }   // ponta B
+  {  0.0000f,  0.0000f, 1.0000f }   // ponta B (borda fixa — up)
 };
 
 // --- Pinos (SafeAlert MVP: evoluir para I2C + TCA9548A) ---

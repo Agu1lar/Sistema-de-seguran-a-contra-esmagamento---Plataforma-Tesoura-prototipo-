@@ -24,7 +24,8 @@ Requisitos: Blender 4.x / 5.x recomendado.
 |------|-----------|
 | Máquina de referência | Skyjack SJIII 3226 (dimensões oficiais) |
 | Problema | Risco de esmagamento contra teto/viga na elevação |
-| Desafio central | Geometria do FoV e cobertura do volume do cesto |
+| Escopo de cobertura (MVP) | **Só o deck principal (fixo)** — extensão roll-out fora do FoV |
+| Desafio central | Geometria do FoV e cobertura do volume do cesto principal |
 | Sensores (comparativo 3D) | Ultrassônico (lóbulo) × ToF VL53L1X (~27°) |
 | Controle (MVP) | ESP32-S3 + 3× VL53L1X + TCA9548A |
 | Atuação | LEDs, buzzer e relé (bloqueio só em colisão iminente ~0,60 m) |
@@ -38,6 +39,20 @@ Requisitos: Blender 4.x / 5.x recomendado.
 ### Por que os sensores ficam no topo?
 
 Com a montagem no **alto do cesto** (e não no piso), o feixe olha para o espaço **acima** da plataforma. O operador e as ferramentas dentro do cesto ficam, em regra, **fora** do volume de leitura — isso reduz (não elimina) o problema de falso positivo por ocupação do cesto.
+
+### Deck extensível — fora do escopo do MVP
+
+A SJIII 3226 tem **roll-out** (~0,9 m em +X). Neste protótipo a cobertura é **deliberadamente só do cesto principal (deck fixo)**:
+
+| Decisão | Motivo |
+|---------|--------|
+| Nenhum sensor na zona da extensão (`X ≳ 0,105 m`) | Estender o deck **não move** sensores nem cabos da lógica MVP |
+| Envelope em `config.h` corta em `EXTENSAO_X_INICIO_M` | Hits acima da extensão → `FORA_ESCOPO` (não bloqueiam como teto do principal) |
+| Sensor “Direito” na **borda do fixo** (`X ≈ 0,05 m`), não na ponta | Continua havendo 3 FoVs no principal; a ponta móvel fica descoberta **por desenho** |
+
+No Blender: placa âmbar `Zona_Extensao_Deck` (+ clone ToF) marca a área sem FoV; `Extension_Deck` pode deslizar sem parentesco com os grupos de sensor.
+
+**Limite explícito:** com o deck estendido, obstáculos **acima da extensão** não são o alvo deste MVP. Produto futuro: sensor na extensão + cabo com folga, ou interlock de modo.
 
 ---
 
@@ -121,20 +136,21 @@ Braço/ferramenta no FoV pode parecer obstáculo.
 
 ### 3) Cobertura do volume do cesto
 
-**Solução geométrica no modelo 3D** — disposição **escalonada** (não colinear):
+**Solução geométrica no modelo 3D** — disposição **escalonada** no **deck fixo** (não colinear; **nada** na extensão):
 
-1. **Ponta A** — uma extremidade / fundo  
-2. **Meio** — lateral de referência, **~10° para dentro**  
-3. **Ponta B** — outra extremidade, profundidade intermediária  
+1. **Ponta A (traseira)** — `X ≈ −1,015 m`  
+2. **Meio** — lateral de referência, `X ≈ 0`, **~10° para dentro**  
+3. **Dianteiro no limiar do fixo** — `X ≈ 0,05 m` (antes do roll-out em `X ≳ 0,105 m`), apontamento ~vertical  
 
-**Apontamento otimizado (cobertura do volume do cesto, FoV ~27°):**
+**Apontamento (cobertura do cesto principal, FoV ~27°):**
 
 | Sensor | Inclinação |
 |--------|------------|
 | **Meio** | **~10° para dentro** do cesto |
-| **Pontas** | **~9° para dentro** + leve convergência longitudinal (~6°) |
+| **Ponta traseira** | **~9° para dentro** + leve convergência |
+| **Dianteiro (fixo)** | ~vertical — não cobre a extensão |
 
-> 7° só nas pontas (meio a 0°) subcobria o footprint do cesto na faixa crítica 1,5–2,0 m. Simulação de cobertura elevou de ~53% → ~94% @ 2 m com meio a ~10° in.
+> A ponta da extensão permanece descoberta de propósito no MVP. Ver *Deck extensível*.
 
 ### 4) Ultrassônico × ToF
 
@@ -339,10 +355,11 @@ Se estourar o teto: use **ESP32-WROOM-32 DevKit** (~R$ 35–50) no lugar do S3.
            |
     ┌──────┼──────────────┐
   ToF S1  ToF S2        ToF S3
-  ponta   meio          ponta
+  traseira meio         limiar fixo
+  (fixo)  (fixo)        (antes da extensão)
 ```
 
-**Notas:** I2C não gosta de cabo longo — use Cat6, clock baixo (~50 kHz) e GND comum 3V3/5V. O firmware atual ainda lê HC-SR04 por GPIO; a porta para VL53L1X+TCA9548A está no roadmap.
+**Notas:** I2C não gosta de cabo longo — use Cat6, clock baixo (~50 kHz) e GND comum 3V3/5V. O firmware atual ainda lê HC-SR04 por GPIO; a porta para VL53L1X+TCA9548A está no roadmap. Cabos só no rail do **deck fixo** — estender o roll-out não puxa a instalação MVP.
 
 ---
 
@@ -356,6 +373,7 @@ Se estourar o teto: use **ESP32-WROOM-32 DevKit** (~R$ 35–50) no lugar do S3.
 | Largura | 0,81 m |
 | Altura (guarda-corpos erguidos) | 2,15 m |
 | Plataforma interna | 2,13 × 0,71 m |
+| Extensão roll-out (ref.) | ~0,9 m em +X — **fora do FoV no MVP** |
 | Altura do piso do cesto | 1,14 m |
 | Distância entre eixos | 1,75 m |
 
@@ -368,6 +386,8 @@ Se estourar o teto: use **ESP32-WROOM-32 DevKit** (~R$ 35–50) no lugar do S3.
 | `SJIII_3226_ToF` | **Clone** da plataforma para comparativo |
 | `Sensores_ToF` | Módulos ToF (VL53L1X) e cones ópticos |
 | `SJIII_3226_ROOT` / `SJIII_3226_ToF_ROOT` | Empties-raiz (mover o conjunto inteiro) |
+| `Zona_Extensao` | Marcação âmbar do roll-out (**sem** sensores) |
+| `Instalacao_MVP_ToF` | Caixa IP65, cabos e capuzes (só rail fixo) |
 
 ### Representação dos volumes no 3D
 
@@ -381,10 +401,10 @@ Se estourar o teto: use **ESP32-WROOM-32 DevKit** (~R$ 35–50) no lugar do S3.
 | `Volume_ToF_Vermelho_*` | **1,2 m** | vermelho | aperto + buzzer — ainda sobe |
 | `Volume_ToF_Bloqueio_*` | **0,6 m** | azul | **bloqueio** (iminente) |
 
-Empties de apuntamento:
+Empties de apuntamento (todos com `X < 0,105 m` — deck fixo):
 
-- US: `Grupo_Sensor_Esquerdo` / `Central` / `Direito`  
-- ToF: `Grupo_Sensor_ToF_Esquerdo` / `Central` / `Direito`
+- US: `Grupo_Sensor_Esquerdo` / `Central` / `Direito` (`Direito` em `X≈0,05`)  
+- ToF: `Grupo_Sensor_ToF_*` (mesmas poses + offset Y)
 
 ---
 
@@ -479,6 +499,7 @@ Histerese de liberação: **0,75 m** (`DIST_LIBERA_BLOQUEIO_M`).
 - [ ] Ensaios sob **sol direto** vs sombra: status/ambient do VL53L1X, alcance útil real, capuz mecânico (± filtro 940 nm externo como experimento)  
 - [ ] Housing + cover glass nos ToF; ensaio **poeira na janela** / gotas; checklist de limpeza no teste diário  
 - [ ] Multilateração só para alvos pontuais compartilhados (opcional)  
+- [ ] *(Produto, fora do MVP)* Sensor na extensão + cabo com folga; ou interlock quando roll-out aberto  
 - [ ] *(Produto, fora do MVP)* Esboço de arquitetura dual-channel + isolamento na interface de bloqueio; mapear requisitos EN 280 / ISO 13849
 
 ---
