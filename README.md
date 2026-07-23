@@ -167,6 +167,14 @@ ESP32-S3 + TCA9548A + 3× VL53L1X + LEDs/buzzer/relé — ver SafeAlert MVP.
 
 ![SafeAlert MVP — arranjo na protoboard](images/safealert_mvp_protoboard.png)
 
+### Instalação no cesto (Blender)
+
+Caixa IP65 aberta junto ao painel de controle, com protoboard + ESP32 + TCA9548A + relé/LEDs; cabos Cat ao longo do top rail até os 3 ToF; capuzes anti-sol/poeira nos sensores. Coleção Blender: `Instalacao_MVP_ToF` (câmera `Cam_MVP_Install`).
+
+![Instalação MVP no cesto](images/mvp_instalacao_cesto.png)
+
+![Instalação MVP — vista geral](images/mvp_instalacao_geral.png)
+
 ---
 
 ## Hardware SafeAlert MVP — verificação do diagrama
@@ -434,7 +442,9 @@ Histerese de liberação: **0,75 m** (`DIST_LIBERA_BLOQUEIO_M`).
 │   ├── tof_vista_geral.png
 │   ├── tof_detalhe_cesto.png
 │   ├── comparativo_us_tof.png
-│   └── safealert_mvp_protoboard.png
+│   ├── safealert_mvp_protoboard.png
+│   ├── mvp_instalacao_cesto.png
+│   └── mvp_instalacao_geral.png
 └── esp32_anti_esmagamento/
     ├── esp32_anti_esmagamento.ino
     ├── config.h
