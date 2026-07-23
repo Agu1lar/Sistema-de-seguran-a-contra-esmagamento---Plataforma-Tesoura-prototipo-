@@ -29,6 +29,11 @@ Requisitos: Blender 4.x / 5.x recomendado.
 | Controle (MVP) | ESP32-S3 + 3× VL53L1X + TCA9548A |
 | Atuação | LEDs, buzzer e relé (bloqueio só em colisão iminente ~0,60 m) |
 | Operador de referência | Altura média **1,80 m** — máquina não trava na folga de trabalho |
+| **Faixas oficiais** | **`config.h`**: livre >2,50 · amarelo ≤2,50 · vermelho ≤1,20 · bloqueio ≤0,60 m |
+
+> **Fonte da verdade das distâncias:** `esp32_anti_esmagamento/config.h`  
+> (`DIST_AMARELO_M`, `DIST_VERMELHO_M`, `DIST_BLOQUEIO_M`, `H_OPERADOR_M`).  
+> O README e o Blender ToF devem espelhar esses valores — **não** use mais 6,0 / 3,5 / 1,5 m (faixas antigas, abandonadas).
 
 ### Por que os sensores ficam no topo?
 
@@ -341,14 +346,16 @@ Ler r0,r1,r2
 
 ### Faixas de severidade (após geometria)
 
-| Distância `d` (ameaça no envelope) | Estado | Ação |
-|-----------------------------------|--------|------|
-| `d > 2,50 m` | LIVRE | Verde — trabalho ok |
-| `1,20 < d ≤ 2,50 m` | AMARELO | Atenção — sobe |
-| `0,60 < d ≤ 1,20 m` | VERMELHO | Buzzer — **ainda sobe** |
-| `d ≤ 0,60 m` | BLOQUEIO | Relé + LED azul (iminente) |
+Valores iguais a `config.h` (única tabela vigente — **não** use 6,0 / 3,5 / 1,5 m):
 
-Histerese de liberação: **0,75 m**.
+| Distância `d` (ameaça no envelope) | Constante | Estado | Ação |
+|-----------------------------------|-----------|--------|------|
+| `d > 2,50 m` | acima de `DIST_AMARELO_M` | LIVRE | Verde — trabalho ok |
+| `1,20 < d ≤ 2,50 m` | entre vermelho e amarelo | AMARELO | Atenção — sobe |
+| `0,60 < d ≤ 1,20 m` | `DIST_VERMELHO_M` | VERMELHO | Buzzer — **ainda sobe** |
+| `d ≤ 0,60 m` | `DIST_BLOQUEIO_M` | BLOQUEIO | Relé + LED azul (iminente) |
+
+Histerese de liberação: **0,75 m** (`DIST_LIBERA_BLOQUEIO_M`).
 
 > **Aviso:** este é um protótipo de estudo. Sistema de segurança real em MEWP exige redundância, validação normativa e projeto fail-safe adequado — não substitua proteções certificadas do fabricante.
 
