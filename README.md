@@ -51,24 +51,23 @@ A SJIII 3226 tem **roll-out** (~0,9 m em +X). Neste protótipo a cobertura é **
 | Cabo com **laço de folga** (perto da caixa IP65 + no sensor) | Folga mecânica se algo puxar; extensão não tensiona o harness |
 | Envelope em `config.h` corta em `EXTENSAO_X_INICIO_M` | Hits acima da extensão → `FORA_ESCOPO` |
 
-**Cantos (modelo forte):**
+**Cantos (modelo forte — só traseira):**
 
 ```text
         +Y
          ^
-  TL ●───────────────● FL     ← Frente L = limiar do FIXO (X≈0,05)
-     │   DECK FIXO    │
-  TR ●───────────────┘        ← extensão (+X) começa em X≳0,105 — SEM sensor
-         (traseira)
+  TL ●──●── (Lateral_L em X≈-0,53)
+     │  traseira FIXA
+  TR ●─────────────→ +X (extensão longe, SEM sensor)
 ```
 
-| ID | Canto | Pose |
-|----|-------|------|
-| `SENSOR_TRASEIRA_L` | Traseira +Y | `(-1,015 · +0,355 · 2,16)` |
-| `SENSOR_TRASEIRA_R` | Traseira −Y | `(-1,015 · −0,355 · 2,16)` |
-| `SENSOR_FRENTE_L` | Frente fixa +Y | `(+0,050 · +0,355 · 2,16)` |
+| ID | Onde | Pose |
+|----|------|------|
+| `SENSOR_TRASEIRA_L` | Canto traseiro +Y | `(-1,015 · +0,355 · 2,16)` |
+| `SENSOR_TRASEIRA_R` | Canto traseiro −Y | `(-1,015 · −0,355 · 2,16)` |
+| `SENSOR_LATERAL_L` | Poste no rail +Y (terço traseiro) | `(-0,533 · +0,355 · 2,16)` |
 
-No Blender: placa âmbar `Zona_Extensao_*` + script `scripts/rebuild_sensor_corners.py`.
+Nada em `X > -0,50` (evita o “meio” do rail com a extensão recolhida).
 
 **Limite explícito:** com o deck estendido, obstáculos **acima da extensão** não são o alvo deste MVP.
 
@@ -154,16 +153,15 @@ Braço/ferramenta no FoV pode parecer obstáculo.
 
 ### 3) Cobertura do volume do cesto
 
-**Modelo forte:** 3 sensores nos **cantos do rail** do deck fixo (FoV ~27°, eixo ToF = +Z):
+**Modelo forte:** 3 sensores só na **traseira** do deck fixo (cantos/poste — nunca no meio do rail longo):
 
-| Sensor | Canto | Pose `(X, Y, Z)` m |
-|--------|-------|-------------------|
-| `SENSOR_TRASEIRA_L` | Traseira +Y | `(-1,015 · +0,355 · 2,16)` |
-| `SENSOR_TRASEIRA_R` | Traseira −Y | `(-1,015 · −0,355 · 2,16)` |
-| `SENSOR_FRENTE_L` | Frente fixa +Y | `(+0,050 · +0,355 · 2,16)` |
+| Sensor | Onde | Pose `(X, Y, Z)` m |
+|--------|------|-------------------|
+| `SENSOR_TRASEIRA_L` | Canto traseiro +Y | `(-1,015 · +0,355 · 2,16)` |
+| `SENSOR_TRASEIRA_R` | Canto traseiro −Y | `(-1,015 · −0,355 · 2,16)` |
+| `SENSOR_LATERAL_L` | Poste rail +Y (terço traseiro) | `(-0,533 · +0,355 · 2,16)` |
 
-Apontamento: ~9° do vertical para o **centro do deck fixo**.  
-Proibido: miolo do cesto, meio do comprimento, qualquer `X ≥ 0,105` (extensão).
+Todos com `X ≤ -0,50`. Extensão e miolo do cesto livres.
 
 > Script de rebuild: `scripts/rebuild_sensor_corners.py`
 
@@ -370,8 +368,7 @@ Se estourar o teto: use **ESP32-WROOM-32 DevKit** (~R$ 35–50) no lugar do S3.
            |
     ┌──────┼──────────────┐
   ToF S1          ToF S2          ToF S3
-  Traseira L      Traseira R      Frente L (fixo)
-  (canto)         (canto)         (canto, antes da extensão)
+  Traseira L      Traseira R      Lateral L (poste traseiro)
 ```
 
 **Notas:** I2C não gosta de cabo longo — use Cat6, clock baixo (~50 kHz) e GND comum 3V3/5V. O firmware atual ainda lê HC-SR04 por GPIO; a porta para VL53L1X+TCA9548A está no roadmap. Cabos só no rail do **deck fixo**, com **laço de folga** — estender o roll-out não puxa a instalação MVP.
@@ -416,9 +413,9 @@ Se estourar o teto: use **ESP32-WROOM-32 DevKit** (~R$ 35–50) no lugar do S3.
 | `Volume_ToF_Vermelho_*` | **1,2 m** | vermelho | aperto + buzzer — ainda sobe |
 | `Volume_ToF_Bloqueio_*` | **0,6 m** | azul | **bloqueio** (iminente) |
 
-Empties de apuntamento (3 **cantos** do deck fixo, `X < 0,105 m`):
+Empties (só traseira fixa, `X ≤ -0,50`):
 
-- US / ToF: `Grupo_Sensor_*` / `Grupo_Sensor_ToF_*` com custom prop `corner` = `Traseira_L` | `Traseira_R` | `Frente_L`
+- `corner` = `Traseira_L` | `Traseira_R` | `Lateral_L`
 
 ---
 

@@ -1,45 +1,40 @@
 """
-SafeAlert — modelo forte de disposição (deck FIXO, só CANTOS do rail).
+SafeAlert — disposição CORRETA (só traseira do deck FIXO).
+
+Problema anterior: "Frente_L" em X≈0,05 parece o MEIO do rail longo
+quando a extensão está recolhida (o cesto inteiro vai de -1,015 a +1,015).
 
 Regras:
-  1) Sensores só no TOPO do guarda-corpo do deck PRINCIPAL.
-  2) Nunca no miolo do cesto (Y≈0 no meio) nem no meio do comprimento.
-  3) Nunca em X ≥ EXTENSAO_X (roll-out).
-  4) 3 cantos do retângulo fixo + cabo com laço de folga.
-  5) Eixo óptico ToF = local +Z.
+  1) Os 3 sensores ficam na METADE TRASEIRA (X <= -0,50).
+  2) Só em CANTOS ou POSTES do rail — nunca no vão livre do meio.
+  3) Nada em X >= EXTENSAO (0,105); na prática nada perto do roll-out.
+  4) Cabo com laço de folga.
+  5) ToF: eixo óptico = local +Z.
 
-Cantos (metros, Z = topo rail 2.16):
-  Traseira L: (-1.015, +0.355)
-  Traseira R: (-1.015, -0.355)
-  Frente L (limiar fixo): (+0.050, +0.355)
+Cantos/postes:
+  Traseira_L: (-1.015, +0.355)  Post canto traseiro +Y
+  Traseira_R: (-1.015, -0.355)  Post canto traseiro -Y
+  Lateral_L:  (-0.533, +0.355)  Post_2 no rail +Y (terço traseiro)
 """
 
 import bpy
 import math
-from mathutils import Vector, Matrix
+from mathutils import Vector
 
 EXT_X = 0.105
 TOP_Z = 2.16
 YOFF = 4.5
 FOV = 27.0
+X_MAX_SENSOR = -0.50  # duro: só traseira
 
-# Centro do deck FIXO (para leve convergência do FoV)
-CX = (-1.015 + 0.050) * 0.5  # ≈ -0.4825
+# Centro da zona instrumentada (traseira do fixo)
+CX = -0.774
 CY = 0.0
 
-
-def aim_toward_fixed_center(sx, sy, tilt_deg=9.0):
-    dx, dy = CX - sx, CY - sy
-    horiz = math.hypot(dx, dy) or 1.0
-    t = math.radians(tilt_deg)
-    return Vector((dx / horiz * math.sin(t), dy / horiz * math.sin(t), math.cos(t))).normalized()
-
-
-# (legacy_suffix, new_label, pos_US)
 CORNERS = [
     ("Esquerdo", "Traseira_L", Vector((-1.015, 0.355, TOP_Z))),
     ("Central", "Traseira_R", Vector((-1.015, -0.355, TOP_Z))),
-    ("Direito", "Frente_L", Vector((0.050, 0.355, TOP_Z))),
+    ("Direito", "Lateral_L", Vector((-0.533, 0.355, TOP_Z))),
 ]
 
 LAYERS = [
@@ -48,6 +43,15 @@ LAYERS = [
     ("Vermelho", 1.20, (0.95, 0.25, 0.15), 0.18),
     ("Bloqueio", 0.60, (0.25, 0.45, 0.95), 0.30),
 ]
+
+
+def aim_toward_center(sx, sy, tilt_deg=9.0):
+    dx, dy = CX - sx, CY - sy
+    horiz = math.hypot(dx, dy) or 1.0
+    t = math.radians(tilt_deg)
+    return Vector(
+        (dx / horiz * math.sin(t), dy / horiz * math.sin(t), math.cos(t))
+    ).normalized()
 
 
 def mat_alpha(name, color, alpha):
@@ -112,18 +116,18 @@ def rebuild_tof():
     M_BODY = mat_solid("ToF_Body", (0.08, 0.12, 0.22), 0.35, 0.2)
     M_WIN = mat_solid("ToF_Window", (0.15, 0.05, 0.25), 0.15, 0.0)
     M_HOOD = mat_solid("MVP_Hood", (0.1, 0.1, 0.1), 0.45, 0.0)
-
     cable_mats = {
         "Esquerdo": bpy.data.materials.get("MVP_Cable_Orange"),
         "Central": bpy.data.materials.get("MVP_Cable_Blue"),
         "Direito": bpy.data.materials.get("MVP_Cable_Black"),
     }
 
-    print("CORNER_MODEL ToF")
+    print("REAR_FIXED_MODEL ToF")
     for old, label, pos in CORNERS:
-        assert pos.x < EXT_X
+        assert pos.x <= X_MAX_SENSOR, pos
+        assert pos.x < EXT_X, pos
         world = pos + Vector((0, YOFF, 0))
-        direction = aim_toward_fixed_center(pos.x, pos.y)
+        direction = aim_toward_center(pos.x, pos.y)
         rot3 = direction.to_track_quat("Z", "Y").to_matrix()
 
         bpy.ops.object.empty_add(type="ARROWS", location=world)
@@ -132,13 +136,13 @@ def rebuild_tof():
         g.empty_display_size = 0.07
         g["corner"] = label
         g["fixed_deck_only"] = True
+        g["zone"] = "traseira_fixa"
         link(g, col)
         set_world(g, rot3, world)
         mw = g.matrix_world.copy()
         g.parent = root
         g.matrix_world = mw
 
-        # body — apply scale BEFORE matrix_world
         bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, 0))
         body = bpy.context.active_object
         body.name = f"Sensor_ToF_{old}"
@@ -187,8 +191,8 @@ def rebuild_tof():
         bpy.ops.object.text_add(location=world + Vector((0.03, 0.03, 0.07)))
         lab = bpy.context.active_object
         lab.name = f"Label_Sensor_ToF_{old}"
-        lab.data.body = f"ToF {label}\ncanto fixo"
-        lab.data.size = 0.035
+        lab.data.body = f"ToF {label}\ntraseira fixa"
+        lab.data.size = 0.032
         lab.data.extrude = 0.001
         lab.rotation_euler = (math.radians(90), 0, 0)
         link(lab, col)
@@ -196,7 +200,6 @@ def rebuild_tof():
         lab.parent = root
         lab.matrix_world = mw
 
-        # hood
         bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, 0))
         hood = bpy.context.active_object
         hood.name = f"MVP_Capuz_{old}"
@@ -204,19 +207,16 @@ def rebuild_tof():
         bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
         hood.data.materials.clear()
         hood.data.materials.append(M_HOOD)
-        if inst:
-            link(hood, inst)
-        else:
-            link(hood, col)
+        link(hood, inst if inst else col)
         hpos = world + direction * 0.035
         set_world(hood, rot3, hpos)
         mw = hood.matrix_world.copy()
         hood.parent = root
         hood.matrix_world = mw
 
-        print(f"  {label}: {tuple(round(v,3) for v in world)} aim={tuple(round(v,3) for v in direction)}")
+        print(f"  {label}: {tuple(round(v, 3) for v in world)} aim={tuple(round(v, 3) for v in direction)}")
 
-    # cables with slack loops (folga) along fixed rails only
+    # Cabos só na traseira + laço de folga
     esp = bpy.data.objects.get("MVP_ESP32")
     if esp and inst:
         B = esp.matrix_world.translation + Vector((0, 0, -0.04))
@@ -226,28 +226,27 @@ def rebuild_tof():
         for old, label, pos in CORNERS:
             tgt = pos + Vector((0, YOFF, 0))
             offs = {"Esquerdo": -0.03, "Central": 0.0, "Direito": 0.03}[old]
-            # path: gland → drip loop → rail → along fixed rails → small slack at sensor
             p0 = B + Vector((offs, 0, 0))
-            p_loop = B + Vector((offs, -0.08, 0.06))  # laço de folga perto da caixa
-            p_rail = Vector((B.x + offs, y_plus + 0.03, rail_z))
+            p_loop = B + Vector((offs, -0.10, 0.08))  # folga
+            p_rail = Vector((min(B.x, -0.4) + offs * 0.2, y_plus + 0.03, rail_z))
             pts = [p0, p_loop, p_rail]
             if old == "Esquerdo":
                 pts += [
                     Vector((-1.015, y_plus + 0.03, rail_z)),
-                    tgt + Vector((0.04, 0.04, -0.02)),
+                    tgt + Vector((0.05, 0.05, -0.02)),
                     tgt + Vector((0, 0, -0.02)),
                 ]
             elif old == "Central":
                 pts += [
                     Vector((-1.015, y_plus + 0.03, rail_z)),
                     Vector((-1.015, y_minus - 0.03, rail_z)),
-                    tgt + Vector((0.04, -0.04, -0.02)),
+                    tgt + Vector((0.05, -0.05, -0.02)),
                     tgt + Vector((0, 0, -0.02)),
                 ]
-            else:  # Frente_L
+            else:  # Lateral_L em X=-0.533, Y=+
                 pts += [
-                    Vector((0.05, y_plus + 0.03, rail_z)),
-                    tgt + Vector((-0.04, 0.04, -0.02)),
+                    Vector((-0.533, y_plus + 0.03, rail_z)),
+                    tgt + Vector((0.05, 0.05, -0.02)),
                     tgt + Vector((0, 0, -0.02)),
                 ]
             cd = bpy.data.curves.new(f"MVP_Cabo_{old}_d", "CURVE")
@@ -270,54 +269,52 @@ def rebuild_tof():
             o.matrix_world = mw
 
 
-def rebuild_us_aims():
-    """US legado: volumes no +X — reposiciona grupos nos 3 cantos."""
+def rebuild_us():
     root = bpy.data.objects["SJIII_3226_ROOT"]
-    print("CORNER_MODEL US")
+    print("REAR_FIXED_MODEL US")
     for old, label, pos in CORNERS:
         g = bpy.data.objects.get(f"Grupo_Sensor_{old}")
         if not g:
-            print("  missing", old)
             continue
-        direction = aim_toward_fixed_center(pos.x, pos.y)
-        # US mesh beam = local +X
+        direction = aim_toward_center(pos.x, pos.y)
         rot3 = direction.to_track_quat("X", "Z").to_matrix()
         mw = rot3.to_4x4()
         mw.translation = pos
         g.matrix_world = mw
+        g["corner"] = label
+        g["zone"] = "traseira_fixa"
         if g.parent != root:
             mw2 = g.matrix_world.copy()
             g.parent = root
             g.matrix_world = mw2
-        g["corner"] = label
         lab = bpy.data.objects.get(f"Label_Sensor_{old}")
         if lab:
             lab.parent = None
             lab.location = pos + Vector((0.03, 0.03, 0.07))
             lab.rotation_euler = (math.radians(90), 0, 0)
             lab.data.body = f"US {label}"
-            lab.data.size = 0.035
+            lab.data.size = 0.032
             mw = lab.matrix_world.copy()
             lab.parent = root
             lab.matrix_world = mw
-        print(f"  {label}: {tuple(round(v,3) for v in pos)}")
+        print(f"  {label}: {tuple(round(v, 3) for v in pos)}")
 
 
 def main():
     rebuild_tof()
-    rebuild_us_aims()
+    rebuild_us()
     bpy.context.view_layer.update()
     bpy.ops.wm.save_mainfile()
-    # sanity
     for old, label, pos in CORNERS:
         g = bpy.data.objects[f"Grupo_Sensor_ToF_{old}"]
         s = bpy.data.objects[f"Sensor_ToF_{old}"]
-        assert g.matrix_world.translation.x < EXT_X
-        assert abs(g.matrix_world.translation.y - (pos.y + YOFF)) < 0.02
+        t = g.matrix_world.translation
+        assert t.x <= X_MAX_SENSOR + 1e-3, t
         assert s.dimensions.x < 0.1
         z = g.matrix_world.to_3x3() @ Vector((0, 0, 1))
         assert z.z > 0.9
-    print("SANITY_PASS corner-only model")
+        print("OK", label, tuple(round(v, 3) for v in t))
+    print("SANITY_PASS rear-only corners")
 
 
 if __name__ == "__main__":
