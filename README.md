@@ -1,4 +1,4 @@
-# ConectorBlender — Anti-esmagamento em plataforma elevatória (SJIII 3226)
+# Sistema de segurança contra esmagamento — Plataforma Tesoura (protótipo)
 
 Projeto de visualização 3D + lógica embarcada para um sistema de **detecção de obstáculos acima do cesto** em plataforma elevatória tipo tesoura, inspirado nas dimensões da **Skyjack SJIII 3226**.
 
@@ -155,10 +155,10 @@ O sketch já deixa um esboço dessa ideia; a lógica principal do protótipo per
 ## Estrutura do repositório
 
 ```text
-ConectorBlender/
+.
 ├── README.md
+├── LICENSE
 ├── SJIII_3226_anti_esmagamento.blend   ← modelo 3D para download
-├── addon.py                            ← addon Blender MCP (opcional)
 ├── images/
 │   ├── tof_vista_geral.png
 │   ├── tof_detalhe_cesto.png
@@ -175,14 +175,6 @@ ConectorBlender/
 1. Baixe / abra `SJIII_3226_anti_esmagamento.blend`
 2. No Outliner, localize `SJIII_3226` (US) e `SJIII_3226_ToF` (comparativo)
 3. Viewport em *Material Preview* para ver os cones transparentes
-
-### Blender MCP (opcional)
-
-Se quiser controlar o Blender via Cursor/Claude:
-
-1. Instale `addon.py` em **Editar → Preferências → Complementos → Instalar do Disco**
-2. Ative **Blender MCP** e clique em **Connect** na aba lateral
-3. Configure o servidor MCP `blender` no Cursor (ver `.cursor/mcp.json`)
 
 ---
 
