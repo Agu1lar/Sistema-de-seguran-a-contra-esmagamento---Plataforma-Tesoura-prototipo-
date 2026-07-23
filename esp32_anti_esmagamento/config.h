@@ -77,6 +77,7 @@ struct Vec3 {
 
 // Poses no DECK FIXO apenas (nenhum sensor em X ≥ EXTENSAO_X_INICIO_M).
 // SENSOR_PONTA_B fica na borda dianteira do principal (~0,05 m), não na ponta da extensão.
+// Blender ToF: eixo óptico do empty = local +Z (= SENSOR_DIR). US legado: local +X.
 static const Vec3 SENSOR_POS[NUM_SENSORES] = {
   { -1.015f,  0.355f, TOPO_RAIL_Z_M },  // ponta traseira (fixo)
   {  0.000f, -0.355f, TOPO_RAIL_Z_M },  // meio (fixo)

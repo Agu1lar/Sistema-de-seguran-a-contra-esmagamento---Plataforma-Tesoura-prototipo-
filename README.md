@@ -136,21 +136,17 @@ Braço/ferramenta no FoV pode parecer obstáculo.
 
 ### 3) Cobertura do volume do cesto
 
-**Solução geométrica no modelo 3D** — disposição **escalonada** no **deck fixo** (não colinear; **nada** na extensão):
+**Modelo forte de disposição (MVP)** — deck **fixo** apenas; eixo óptico = **local +Z** (cones ToF reconstruídos assim):
 
-1. **Ponta A (traseira)** — `X ≈ −1,015 m`  
-2. **Meio** — lateral de referência, `X ≈ 0`, **~10° para dentro**  
-3. **Dianteiro no limiar do fixo** — `X ≈ 0,05 m` (antes do roll-out em `X ≳ 0,105 m`), apontamento ~vertical  
+| Sensor | Pose `(X, Y, Z)` m | Apontamento |
+|--------|-------------------|-------------|
+| **Esquerdo** (traseira) | `(-1,015 · 0,355 · 2,16)` | ~9° in + convergência leve |
+| **Central** (meio) | `(0 · −0,355 · 2,16)` | ~10° para dentro (+Y) |
+| **Direito** (limiar fixo) | `(0,05 · 0 · 2,16)` | vertical — **não** cobre a extensão |
 
-**Apontamento (cobertura do cesto principal, FoV ~27°):**
+Restrição dura: **todos** com `X < EXTENSAO_X_INICIO_M (0,105)`. Fonte: `config.h` (`SENSOR_POS` / `SENSOR_DIR`).
 
-| Sensor | Inclinação |
-|--------|------------|
-| **Meio** | **~10° para dentro** do cesto |
-| **Ponta traseira** | **~9° para dentro** + leve convergência |
-| **Dianteiro (fixo)** | ~vertical — não cobre a extensão |
-
-> A ponta da extensão permanece descoberta de propósito no MVP. Ver *Deck extensível*.
+> Blender: `Grupo_Sensor_ToF_*` com **+Z = feixe**; volumes `Volume_ToF_{Alcance,Amarelo,Vermelho,Bloqueio}_*`. US legado usa +X como feixe (mesmo aim em world).
 
 ### 4) Ultrassônico × ToF
 
