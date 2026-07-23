@@ -40,9 +40,9 @@ static const float DIST_MIN_VALIDA_M = 0.03f;
 static const int NUM_SENSORES = 3;
 
 enum SensorId {
-  SENSOR_PONTA_A = 0,
-  SENSOR_MEIO    = 1,
-  SENSOR_PONTA_B = 2
+  SENSOR_TRASEIRA_L = 0,  // canto traseiro +Y (fixo)
+  SENSOR_TRASEIRA_R = 1,  // canto traseiro -Y (fixo)
+  SENSOR_FRENTE_L   = 2   // canto dianteiro +Y do FIXO (antes do roll-out)
 };
 
 // --- Geometria do cesto (metros) — alinhada ao modelo SJIII 3226 ---
@@ -75,23 +75,21 @@ struct Vec3 {
   float x, y, z;
 };
 
-// Poses no DECK FIXO apenas (nenhum sensor em X ≥ EXTENSAO_X_INICIO_M).
-// SENSOR_PONTA_B fica na borda dianteira do principal (~0,05 m), não na ponta da extensão.
-// Blender ToF: eixo óptico do empty = local +Z (= SENSOR_DIR). US legado: local +X.
+// MODELO FORTE: 3 CANTOS do rail do deck FIXO — nunca no miolo do cesto.
+//   Traseira L (-1.015, +0.355) | Traseira R (-1.015, -0.355) | Frente L fixa (0.05, +0.355)
+// Extender o roll-out não passa cabo sob tensão: instalação no fixo + laço de folga.
+// Blender ToF: eixo óptico = local +Z (= SENSOR_DIR). US legado: local +X.
 static const Vec3 SENSOR_POS[NUM_SENSORES] = {
-  { -1.015f,  0.355f, TOPO_RAIL_Z_M },  // ponta traseira (fixo)
-  {  0.000f, -0.355f, TOPO_RAIL_Z_M },  // meio (fixo)
-  {  0.050f,  0.000f, TOPO_RAIL_Z_M }   // dianteiro no limiar do fixo (antes do roll-out)
+  { -1.015f,  0.355f, TOPO_RAIL_Z_M },  // Traseira L
+  { -1.015f, -0.355f, TOPO_RAIL_Z_M },  // Traseira R
+  {  0.050f,  0.355f, TOPO_RAIL_Z_M }   // Frente L (limiar do fixo)
 };
 
-// Apontamento p/ cobertura do volume do cesto PRINCIPAL (FoV ~27°):
-// - Meio: ~10° para dentro (+Y)
-// - Traseira: ~9° para dentro + leve convergência
-// - Dianteiro (fixo): quase vertical — não “caça” a extensão
+// ~9° do vertical em direção ao centro do deck FIXO (não “caça” a extensão)
 static const Vec3 SENSOR_DIR[NUM_SENSORES] = {
-  {  0.1045f, -0.1564f, 0.9821f },  // ponta A (traseira)
-  {  0.0000f,  0.1736f, 0.9848f },  // meio
-  {  0.0000f,  0.0000f, 1.0000f }   // ponta B (borda fixa — up)
+  {  0.1302f, -0.0868f, 0.9877f },  // Traseira L → centro fixo
+  {  0.1302f,  0.0868f, 0.9877f },  // Traseira R → centro fixo
+  { -0.1302f, -0.0868f, 0.9877f }   // Frente L  → centro fixo
 };
 
 // --- Pinos (SafeAlert MVP: evoluir para I2C + TCA9548A) ---

@@ -46,13 +46,31 @@ A SJIII 3226 tem **roll-out** (~0,9 m em +X). Neste protótipo a cobertura é **
 
 | Decisão | Motivo |
 |---------|--------|
-| Nenhum sensor na zona da extensão (`X ≳ 0,105 m`) | Estender o deck **não move** sensores nem cabos da lógica MVP |
-| Envelope em `config.h` corta em `EXTENSAO_X_INICIO_M` | Hits acima da extensão → `FORA_ESCOPO` (não bloqueiam como teto do principal) |
-| Sensor “Direito” na **borda do fixo** (`X ≈ 0,05 m`), não na ponta | Continua havendo 3 FoVs no principal; a ponta móvel fica descoberta **por desenho** |
+| Sensores **só nos cantos** do rail fixo | Nada no miolo do cesto; nada no meio do comprimento |
+| Nenhum sensor na zona da extensão (`X ≳ 0,105 m`) | Estender o deck **não move** sensores |
+| Cabo com **laço de folga** (perto da caixa IP65 + no sensor) | Folga mecânica se algo puxar; extensão não tensiona o harness |
+| Envelope em `config.h` corta em `EXTENSAO_X_INICIO_M` | Hits acima da extensão → `FORA_ESCOPO` |
 
-No Blender: placa âmbar `Zona_Extensao_Deck` (+ clone ToF) marca a área sem FoV; `Extension_Deck` pode deslizar sem parentesco com os grupos de sensor.
+**Cantos (modelo forte):**
 
-**Limite explícito:** com o deck estendido, obstáculos **acima da extensão** não são o alvo deste MVP. Produto futuro: sensor na extensão + cabo com folga, ou interlock de modo.
+```text
+        +Y
+         ^
+  TL ●───────────────● FL     ← Frente L = limiar do FIXO (X≈0,05)
+     │   DECK FIXO    │
+  TR ●───────────────┘        ← extensão (+X) começa em X≳0,105 — SEM sensor
+         (traseira)
+```
+
+| ID | Canto | Pose |
+|----|-------|------|
+| `SENSOR_TRASEIRA_L` | Traseira +Y | `(-1,015 · +0,355 · 2,16)` |
+| `SENSOR_TRASEIRA_R` | Traseira −Y | `(-1,015 · −0,355 · 2,16)` |
+| `SENSOR_FRENTE_L` | Frente fixa +Y | `(+0,050 · +0,355 · 2,16)` |
+
+No Blender: placa âmbar `Zona_Extensao_*` + script `scripts/rebuild_sensor_corners.py`.
+
+**Limite explícito:** com o deck estendido, obstáculos **acima da extensão** não são o alvo deste MVP.
 
 ---
 
@@ -122,7 +140,7 @@ Sensor 1D só devolve distância. Perto de um prédio, o FoV pode “raspar” a
 **Solução no projeto**
 - pontos de impacto \(h_i\) fora de \(V_{\text{colisão}}\) → `FORA_ESCOPO`  
 - plano vertical ou \(\Delta r \approx 0\) com subida → `PAREDE`  
-- montagem com FoV para cima; **meio ~10° in** e **pontas ~9° in** (melhor cobertura do cesto na zona 1,5–2,5 m)
+- montagem com FoV para cima nos **cantos** do rail fixo (~9° ao centro do deck principal)
 
 ### 2) Operador e ferramentas dentro do cesto
 
@@ -136,17 +154,18 @@ Braço/ferramenta no FoV pode parecer obstáculo.
 
 ### 3) Cobertura do volume do cesto
 
-**Modelo forte de disposição (MVP)** — deck **fixo** apenas; eixo óptico = **local +Z** (cones ToF reconstruídos assim):
+**Modelo forte:** 3 sensores nos **cantos do rail** do deck fixo (FoV ~27°, eixo ToF = +Z):
 
-| Sensor | Pose `(X, Y, Z)` m | Apontamento |
-|--------|-------------------|-------------|
-| **Esquerdo** (traseira) | `(-1,015 · 0,355 · 2,16)` | ~9° in + convergência leve |
-| **Central** (meio) | `(0 · −0,355 · 2,16)` | ~10° para dentro (+Y) |
-| **Direito** (limiar fixo) | `(0,05 · 0 · 2,16)` | vertical — **não** cobre a extensão |
+| Sensor | Canto | Pose `(X, Y, Z)` m |
+|--------|-------|-------------------|
+| `SENSOR_TRASEIRA_L` | Traseira +Y | `(-1,015 · +0,355 · 2,16)` |
+| `SENSOR_TRASEIRA_R` | Traseira −Y | `(-1,015 · −0,355 · 2,16)` |
+| `SENSOR_FRENTE_L` | Frente fixa +Y | `(+0,050 · +0,355 · 2,16)` |
 
-Restrição dura: **todos** com `X < EXTENSAO_X_INICIO_M (0,105)`. Fonte: `config.h` (`SENSOR_POS` / `SENSOR_DIR`).
+Apontamento: ~9° do vertical para o **centro do deck fixo**.  
+Proibido: miolo do cesto, meio do comprimento, qualquer `X ≥ 0,105` (extensão).
 
-> Blender: `Grupo_Sensor_ToF_*` com **+Z = feixe**; volumes `Volume_ToF_{Alcance,Amarelo,Vermelho,Bloqueio}_*`. US legado usa +X como feixe (mesmo aim em world).
+> Script de rebuild: `scripts/rebuild_sensor_corners.py`
 
 ### 4) Ultrassônico × ToF
 
@@ -199,7 +218,7 @@ O diagrama *“SafeAlert MVP — Arranjo Fictício na Protoboard”* está **con
 |-------|-----------|
 | **ESP32-S3 DevKit** | Adequado como controlador do MVP |
 | **TCA9548A** | Solução correta: os 3× VL53L1X compartilham o mesmo endereço I2C |
-| **S1 / S2 / S3** (traseiro, meio, dianteiro) | Combina com a ideia de cobertura longitudinal do cesto |
+| **S1 / S2 / S3** (3 cantos do rail fixo) | Traseira L/R + Frente L — nada no miolo |
 | **3V3 para mux/sensores e 5V para buzzer/relé** | Separação de trilhos coerente |
 | **LEDs (verde / amarelo / vermelho / azul)** + **220 Ω** | Indicadores de estado claros para demonstração |
 | **Buzzer via 2N2222 + 1 kΩ** | Evita sobrecarregar o GPIO do ESP32 |
@@ -350,12 +369,12 @@ Se estourar o teto: use **ESP32-WROOM-32 DevKit** (~R$ 35–50) no lugar do S3.
      Cat6: 3V3, GND, SDA, SCL  (+ XSHUT opcional)
            |
     ┌──────┼──────────────┐
-  ToF S1  ToF S2        ToF S3
-  traseira meio         limiar fixo
-  (fixo)  (fixo)        (antes da extensão)
+  ToF S1          ToF S2          ToF S3
+  Traseira L      Traseira R      Frente L (fixo)
+  (canto)         (canto)         (canto, antes da extensão)
 ```
 
-**Notas:** I2C não gosta de cabo longo — use Cat6, clock baixo (~50 kHz) e GND comum 3V3/5V. O firmware atual ainda lê HC-SR04 por GPIO; a porta para VL53L1X+TCA9548A está no roadmap. Cabos só no rail do **deck fixo** — estender o roll-out não puxa a instalação MVP.
+**Notas:** I2C não gosta de cabo longo — use Cat6, clock baixo (~50 kHz) e GND comum 3V3/5V. O firmware atual ainda lê HC-SR04 por GPIO; a porta para VL53L1X+TCA9548A está no roadmap. Cabos só no rail do **deck fixo**, com **laço de folga** — estender o roll-out não puxa a instalação MVP.
 
 ---
 
@@ -397,10 +416,9 @@ Se estourar o teto: use **ESP32-WROOM-32 DevKit** (~R$ 35–50) no lugar do S3.
 | `Volume_ToF_Vermelho_*` | **1,2 m** | vermelho | aperto + buzzer — ainda sobe |
 | `Volume_ToF_Bloqueio_*` | **0,6 m** | azul | **bloqueio** (iminente) |
 
-Empties de apuntamento (todos com `X < 0,105 m` — deck fixo):
+Empties de apuntamento (3 **cantos** do deck fixo, `X < 0,105 m`):
 
-- US: `Grupo_Sensor_Esquerdo` / `Central` / `Direito` (`Direito` em `X≈0,05`)  
-- ToF: `Grupo_Sensor_ToF_*` (mesmas poses + offset Y)
+- US / ToF: `Grupo_Sensor_*` / `Grupo_Sensor_ToF_*` com custom prop `corner` = `Traseira_L` | `Traseira_R` | `Frente_L`
 
 ---
 

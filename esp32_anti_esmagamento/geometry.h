@@ -182,8 +182,7 @@ inline DiagnosticoGeometrico classificarObstaculo(const HitPoint* hits, int n, f
     d.classe = CLASSE_TETO;
     d.bloqueioRecomendado =
         (d.hitsNoEnvelope >= MIN_SENSORES_CONSENSO_BLOQUEIO) ||
-        (d.hitsNoEnvelope >= 1 && tetoElev) ||
-        (d.hitsNoEnvelope >= 1 && hits[SENSOR_MEIO].valido && hits[SENSOR_MEIO].noEnvelope);
+        (d.hitsNoEnvelope >= 1 && tetoElev);
     return d;
   }
 
