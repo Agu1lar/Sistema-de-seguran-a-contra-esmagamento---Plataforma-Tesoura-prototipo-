@@ -271,7 +271,15 @@ Se estourar o teto: use **ESP32-WROOM-32 DevKit** (~R$ 35–50) no lugar do S3.
 ### Representação dos volumes no 3D
 
 **Ultrassônico:** envelope ~30° + lóbulo útil ~15° + zona crítica 0,5 m  
-**ToF:** cone ~27° mais nítido + zona crítica  
+**ToF:** camadas alinhadas à lógica do sistema (FoV ~27°):
+
+| Camada | Alcance | Cor | Significado |
+|--------|---------|-----|-------------|
+| `Volume_ToF_Amarelo_*` | **4,0 m** | amarelo | alcance útil típico do VL53L1X / atenção |
+| `Volume_ToF_Vermelho_*` | **3,5 m** | vermelho | alerta + buzzer |
+| `Volume_ToF_Bloqueio_*` | **1,5 m** | azul | bloqueio de subida |
+
+> A faixa lógica de 6 m do firmware permanece como limiar de software; no 3D o envelope externo segue o **alcance útil realista (~4 m)** do sensor.  
 
 Empties de apuntamento:
 
