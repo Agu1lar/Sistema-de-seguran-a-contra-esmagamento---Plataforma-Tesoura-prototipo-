@@ -40,9 +40,9 @@ static const float DIST_MIN_VALIDA_M = 0.03f;
 static const int NUM_SENSORES = 3;
 
 enum SensorId {
-  SENSOR_TRASEIRA_L = 0,  // canto traseiro +Y
-  SENSOR_TRASEIRA_R = 1,  // canto traseiro -Y
-  SENSOR_LATERAL_L  = 2   // poste no rail +Y, terço traseiro (X≈-0,53) — NÃO no meio do cesto
+  SENSOR_TRASEIRA_L = 0,  // canto traseiro +Y (deck fixo)
+  SENSOR_TRASEIRA_R = 1,  // canto traseiro -Y (deck fixo)
+  SENSOR_FRENTE_R   = 2   // canto dianteiro do FIXO no rail -Y (X≈0,05 < extensão)
 };
 
 // --- Geometria do cesto (metros) — alinhada ao modelo SJIII 3226 ---
@@ -75,21 +75,21 @@ struct Vec3 {
   float x, y, z;
 };
 
-// MODELO FORTE: 3 pontos só na TRASEIRA do deck FIXO (X <= -0,50).
-// Nunca no miolo do rail longo (X≈0 parece “meio” com a extensão recolhida).
-//   Traseira L (-1.015,+0.355) | Traseira R (-1.015,-0.355) | Lateral L (-0.533,+0.355)
-// Extensão (+X) livre; cabos com laço de folga. ToF: +Z = SENSOR_DIR.
+// DISPOSIÇÃO = 3 CANTOS do retângulo do DECK FIXO (não do comprimento total OEM).
+//   Traseira L (-1.015, +0.355) | Traseira R (-1.015, -0.355)
+//   Frente R do FIXO (+0.050, -0.355)  ← limiar do fixo; extensão começa em X≥0.105
+// Blender ToF: +Z = SENSOR_DIR. US legado: +X = feixe.
 static const Vec3 SENSOR_POS[NUM_SENSORES] = {
   { -1.015f,  0.355f, TOPO_RAIL_Z_M },  // Traseira L
   { -1.015f, -0.355f, TOPO_RAIL_Z_M },  // Traseira R
-  { -0.533f,  0.355f, TOPO_RAIL_Z_M }   // Lateral L (poste traseiro, não o meio)
+  {  0.050f, -0.355f, TOPO_RAIL_Z_M }   // Frente R (fixo)
 };
 
-// ~9° do vertical → centro da zona traseira instrumentada
+// ~8° do vertical → centro do retângulo fixo
 static const Vec3 SENSOR_DIR[NUM_SENSORES] = {
-  {  0.0879f, -0.1294f, 0.9877f },  // Traseira L
-  {  0.0879f,  0.1294f, 0.9877f },  // Traseira R
-  { -0.0879f, -0.1294f, 0.9877f }   // Lateral L
+  {  0.1158f, -0.0772f, 0.9903f },  // Traseira L
+  {  0.1158f,  0.0772f, 0.9903f },  // Traseira R
+  { -0.1158f,  0.0772f, 0.9903f }   // Frente R fixo
 };
 
 // --- Pinos (SafeAlert MVP: evoluir para I2C + TCA9548A) ---

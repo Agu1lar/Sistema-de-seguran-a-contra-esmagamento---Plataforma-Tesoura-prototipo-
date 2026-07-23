@@ -1,64 +1,79 @@
+# -*- coding: utf-8 -*-
 """
-SafeAlert — disposição CORRETA (só traseira do deck FIXO).
+SafeAlert — redisposição COMPLETA dos sensores (fonte: README + config + geometria Blender).
 
-Problema anterior: "Frente_L" em X≈0,05 parece o MEIO do rail longo
-quando a extensão está recolhida (o cesto inteiro vai de -1,015 a +1,015).
+SISTEMA (lido da documentação/código):
+  - Anti-esmagamento: ToF/US no TOPO do guarda-corpo, FoV para CIMA.
+  - Cobertura MVP = só o DECK FIXO. Extensão roll-out em X ∈ [0.105, 1.015] FORA do FoV.
+  - Classificador geométrico (geometry.h): hits no envelope do fixo; consenso 2+ sensores.
+  - Extensão pode abrir sem mover sensores nem tensionar cabo (laço de folga).
 
-Regras:
-  1) Os 3 sensores ficam na METADE TRASEIRA (X <= -0,50).
-  2) Só em CANTOS ou POSTES do rail — nunca no vão livre do meio.
-  3) Nada em X >= EXTENSAO (0,105); na prática nada perto do roll-out.
-  4) Cabo com laço de folga.
-  5) ToF: eixo óptico = local +Z.
+GEOMETRIA BLENDER (SJIII 3226):
+  Platform_Deck  X[-1.065, 1.065]  Y[-0.375, 0.375]
+  Extension_Deck X[ 0.105, 1.015]  ← móvel, SEM sensor
+  Deck FIXO útil X[-1.015, 0.050]  Y[±0.355]  (antes do roll-out)
+  Top rail Z ≈ 2.16 m
+  Postes nos cantos: (±1.015, ±0.355) e intermediários
 
-Cantos/postes:
-  Traseira_L: (-1.015, +0.355)  Post canto traseiro +Y
-  Traseira_R: (-1.015, -0.355)  Post canto traseiro -Y
-  Lateral_L:  (-0.533, +0.355)  Post_2 no rail +Y (terço traseiro)
+DISPOSIÇÃO (3 CANTOS do retângulo FIXO — não do comprimento total da máquina):
+  S0 Traseira_L : (-1.015, +0.355)  canto traseiro +Y
+  S1 Traseira_R : (-1.015, -0.355)  canto traseiro -Y
+  S2 Frente_R   : (+0.050, -0.355)  canto DIANTEIRO do FIXO no rail -Y
+                  (oposto ao painel de controle em +Y; NÃO é o miolo do cesto)
+
+Nota: no rail completo (extensão recolhida) X=0.05 parece “meio” do comprimento
+total (−1‥+1). Estruturalmente é o LIMITE do fixo; a extensão começa em 0.105.
+Marcamos a zona de extensão no Blender para deixar isso explícito.
+
+Eixo óptico ToF = local +Z. US legado = local +X (meshes antigos).
 """
+
+from __future__ import annotations
+
+import math
 
 import bpy
-import math
 from mathutils import Vector
 
-EXT_X = 0.105
-TOP_Z = 2.16
+# --- constantes alinhadas a config.h / modelo ---
 YOFF = 4.5
-FOV = 27.0
-X_MAX_SENSOR = -0.50  # duro: só traseira
+TOP_Z = 2.16
+EXT_X0 = 0.105
+FOV_TOF = 27.0
+FIXED_X_MAX = 0.050  # último X permitido para sensor (limiar do fixo)
 
-# Centro da zona instrumentada (traseira do fixo)
-CX = -0.774
+# Centro do retângulo FIXO (para leve convergência do FoV)
+CX = (-1.015 + FIXED_X_MAX) * 0.5  # ≈ -0.4825
 CY = 0.0
 
-CORNERS = [
+# (id_legado, nome_doc, pos_local_US)
+SENSORS = [
     ("Esquerdo", "Traseira_L", Vector((-1.015, 0.355, TOP_Z))),
     ("Central", "Traseira_R", Vector((-1.015, -0.355, TOP_Z))),
-    ("Direito", "Lateral_L", Vector((-0.533, 0.355, TOP_Z))),
+    ("Direito", "Frente_R_Fixo", Vector((FIXED_X_MAX, -0.355, TOP_Z))),
 ]
 
-LAYERS = [
-    ("Alcance", 4.00, (0.35, 0.85, 0.95), 0.07),
-    ("Amarelo", 2.50, (0.95, 0.85, 0.15), 0.12),
-    ("Vermelho", 1.20, (0.95, 0.25, 0.15), 0.18),
-    ("Bloqueio", 0.60, (0.25, 0.45, 0.95), 0.30),
+TOF_LAYERS = [
+    ("Alcance", 4.00, (0.35, 0.85, 0.95), 0.06),
+    ("Amarelo", 2.50, (0.95, 0.85, 0.15), 0.11),
+    ("Vermelho", 1.20, (0.95, 0.25, 0.15), 0.17),
+    ("Bloqueio", 0.60, (0.25, 0.45, 0.95), 0.28),
 ]
 
 
-def aim_toward_center(sx, sy, tilt_deg=9.0):
+def aim_up_to_fixed_center(sx: float, sy: float, tilt_deg: float = 8.0) -> Vector:
     dx, dy = CX - sx, CY - sy
-    horiz = math.hypot(dx, dy) or 1.0
+    h = math.hypot(dx, dy) or 1.0
     t = math.radians(tilt_deg)
-    return Vector(
-        (dx / horiz * math.sin(t), dy / horiz * math.sin(t), math.cos(t))
-    ).normalized()
+    v = Vector((dx / h * math.sin(t), dy / h * math.sin(t), math.cos(t)))
+    return v.normalized()
 
 
-def mat_alpha(name, color, alpha):
+def mat_alpha(name, rgb, alpha):
     m = bpy.data.materials.get(name) or bpy.data.materials.new(name)
     m.use_nodes = True
     bsdf = next(n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
-    bsdf.inputs["Base Color"].default_value = (*color, 1)
+    bsdf.inputs["Base Color"].default_value = (*rgb, 1)
     bsdf.inputs["Alpha"].default_value = alpha
     bsdf.inputs["Roughness"].default_value = 0.4
     m.blend_method = "BLEND"
@@ -67,11 +82,11 @@ def mat_alpha(name, color, alpha):
     return m
 
 
-def mat_solid(name, color, rough=0.4, metal=0.1):
+def mat_solid(name, rgb, rough=0.4, metal=0.1):
     m = bpy.data.materials.get(name) or bpy.data.materials.new(name)
     m.use_nodes = True
     bsdf = next(n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
-    bsdf.inputs["Base Color"].default_value = (*color, 1)
+    bsdf.inputs["Base Color"].default_value = (*rgb, 1)
     bsdf.inputs["Roughness"].default_value = rough
     if "Metallic" in bsdf.inputs:
         bsdf.inputs["Metallic"].default_value = metal
@@ -91,10 +106,67 @@ def link(obj, col):
     return obj
 
 
-def set_world(obj, rot3, origin):
+def set_mw(obj, rot3, origin: Vector):
     mw = rot3.to_4x4()
-    mw.translation = origin
+    mw.translation = origin.copy()
     obj.matrix_world = mw
+
+
+def parent_keep(child, parent):
+    mw = child.matrix_world.copy()
+    child.parent = parent
+    child.matrix_world = mw
+
+
+def ensure_col(name):
+    col = bpy.data.collections.get(name) or bpy.data.collections.new(name)
+    if col.name not in [c.name for c in bpy.context.scene.collection.children]:
+        bpy.context.scene.collection.children.link(col)
+    return col
+
+
+def rebuild_extension_markers():
+    wipe(["Zona_Extensao_", "Label_Extensao_", "Label_Zona_"])
+    zcol = ensure_col("Zona_Extensao")
+    mz = mat_alpha("MVP_Extensao_Zona", (1.0, 0.45, 0.08), 0.32)
+
+    def one(name, yoff, parent_name):
+        # footprint da extensão
+        bpy.ops.mesh.primitive_cube_add(size=1, location=(0.56, yoff, 1.162))
+        o = bpy.context.active_object
+        o.name = name
+        o.dimensions = (0.90, 0.66, 0.012)
+        bpy.context.view_layer.update()
+        o.data.materials.clear()
+        o.data.materials.append(mz)
+        link(o, zcol)
+        root = bpy.data.objects[parent_name]
+        parent_keep(o, root)
+
+        # plano vertical no limiar fixo/extensão
+        bpy.ops.mesh.primitive_cube_add(size=1, location=(EXT_X0, yoff, 1.65))
+        wall = bpy.context.active_object
+        wall.name = name + "_Limiar"
+        wall.dimensions = (0.01, 0.72, 1.0)
+        bpy.context.view_layer.update()
+        wall.data.materials.clear()
+        wall.data.materials.append(mat_alpha("MVP_Ext_Limiar", (1.0, 0.2, 0.1), 0.2))
+        link(wall, zcol)
+        parent_keep(wall, root)
+
+        bpy.ops.object.text_add(location=(0.30, yoff + 0.02, 1.22))
+        t = bpy.context.active_object
+        t.name = name.replace("Zona_", "Label_")
+        t.data.body = "EXTENSÃO (móvel)\\nSEM sensor — X≥0,105"
+        t.data.body = "EXTENSÃO (móvel)\nSEM sensor — X≥0,105"
+        t.data.size = 0.04
+        t.data.extrude = 0.001
+        t.rotation_euler = (math.radians(90), 0, 0)
+        link(t, zcol)
+        parent_keep(t, root)
+
+    one("Zona_Extensao_Deck", 0.0, "SJIII_3226_ROOT")
+    one("Zona_Extensao_Deck_ToF", YOFF, "SJIII_3226_ToF_ROOT")
 
 
 def rebuild_tof():
@@ -108,69 +180,60 @@ def rebuild_tof():
             "MVP_Cabo_",
         ]
     )
-    col = bpy.data.collections.get("Sensores_ToF") or bpy.data.collections.new("Sensores_ToF")
-    if col.name not in [c.name for c in bpy.context.scene.collection.children]:
-        bpy.context.scene.collection.children.link(col)
-    root = bpy.data.objects["SJIII_3226_ToF_ROOT"]
+    col = ensure_col("Sensores_ToF")
     inst = bpy.data.collections.get("Instalacao_MVP_ToF")
-    M_BODY = mat_solid("ToF_Body", (0.08, 0.12, 0.22), 0.35, 0.2)
-    M_WIN = mat_solid("ToF_Window", (0.15, 0.05, 0.25), 0.15, 0.0)
-    M_HOOD = mat_solid("MVP_Hood", (0.1, 0.1, 0.1), 0.45, 0.0)
+    root = bpy.data.objects["SJIII_3226_ToF_ROOT"]
+    M_BODY = mat_solid("ToF_Body", (0.07, 0.12, 0.22), 0.35, 0.25)
+    M_WIN = mat_solid("ToF_Window", (0.2, 0.05, 0.3), 0.12, 0.0)
+    M_HOOD = mat_solid("MVP_Hood", (0.08, 0.08, 0.08), 0.45, 0.0)
     cable_mats = {
         "Esquerdo": bpy.data.materials.get("MVP_Cable_Orange"),
         "Central": bpy.data.materials.get("MVP_Cable_Blue"),
         "Direito": bpy.data.materials.get("MVP_Cable_Black"),
     }
 
-    print("REAR_FIXED_MODEL ToF")
-    for old, label, pos in CORNERS:
-        assert pos.x <= X_MAX_SENSOR, pos
-        assert pos.x < EXT_X, pos
+    print("=== REBUILD ToF (3 cantos do FIXO) ===")
+    for old, label, pos in SENSORS:
+        assert pos.x <= FIXED_X_MAX + 1e-6, pos
+        assert pos.x < EXT_X0, pos
         world = pos + Vector((0, YOFF, 0))
-        direction = aim_toward_center(pos.x, pos.y)
+        direction = aim_up_to_fixed_center(pos.x, pos.y)
         rot3 = direction.to_track_quat("Z", "Y").to_matrix()
 
         bpy.ops.object.empty_add(type="ARROWS", location=world)
         g = bpy.context.active_object
         g.name = f"Grupo_Sensor_ToF_{old}"
-        g.empty_display_size = 0.07
+        g.empty_display_size = 0.06
         g["corner"] = label
-        g["fixed_deck_only"] = True
-        g["zone"] = "traseira_fixa"
+        g["fixed_only"] = True
         link(g, col)
-        set_world(g, rot3, world)
-        mw = g.matrix_world.copy()
-        g.parent = root
-        g.matrix_world = mw
+        set_mw(g, rot3, world)
+        parent_keep(g, root)
 
+        # corpo (aplicar escala ANTES do matrix_world)
         bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, 0))
         body = bpy.context.active_object
         body.name = f"Sensor_ToF_{old}"
-        body.scale = (0.036, 0.028, 0.016)
+        body.scale = (0.034, 0.026, 0.015)
         bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
         body.data.materials.clear()
         body.data.materials.append(M_BODY)
         link(body, col)
-        set_world(body, rot3, world)
-        mw = body.matrix_world.copy()
-        body.parent = g
-        body.matrix_world = mw
+        set_mw(body, rot3, world)
+        parent_keep(body, g)
 
-        bpy.ops.mesh.primitive_cylinder_add(radius=0.006, depth=0.003, location=(0, 0, 0))
+        bpy.ops.mesh.primitive_cylinder_add(radius=0.0055, depth=0.003, location=(0, 0, 0))
         win = bpy.context.active_object
         win.name = f"Sensor_ToF_{old}_Window"
         bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
         win.data.materials.clear()
         win.data.materials.append(M_WIN)
         link(win, col)
-        wpos = world + direction * 0.010
-        set_world(win, rot3, wpos)
-        mw = win.matrix_world.copy()
-        win.parent = g
-        win.matrix_world = mw
+        set_mw(win, rot3, world + direction * 0.01)
+        parent_keep(win, g)
 
-        for layer, length, rgb, alpha in LAYERS:
-            radius = math.tan(math.radians(FOV * 0.5)) * length
+        for layer, length, rgb, alpha in TOF_LAYERS:
+            radius = math.tan(math.radians(FOV_TOF * 0.5)) * length
             bpy.ops.mesh.primitive_cone_add(
                 vertices=48, radius1=0.0, radius2=radius, depth=length, location=(0, 0, 0)
             )
@@ -181,77 +244,75 @@ def rebuild_tof():
             cone.data.materials.clear()
             cone.data.materials.append(mat_alpha(f"ToFVol_{layer}", rgb, alpha))
             link(cone, col)
-            set_world(cone, rot3, world)
-            mw = cone.matrix_world.copy()
-            cone.parent = g
-            cone.matrix_world = mw
+            set_mw(cone, rot3, world)
+            parent_keep(cone, g)
             if layer == "Alcance":
                 cone.hide_set(True)
 
-        bpy.ops.object.text_add(location=world + Vector((0.03, 0.03, 0.07)))
+        bpy.ops.object.text_add(location=world + Vector((0.02, -0.02, 0.06)))
         lab = bpy.context.active_object
         lab.name = f"Label_Sensor_ToF_{old}"
-        lab.data.body = f"ToF {label}\ntraseira fixa"
-        lab.data.size = 0.032
-        lab.data.extrude = 0.001
+        lab.data.body = f"ToF {label}"
+        lab.data.size = 0.03
+        lab.data.extrude = 0.0008
         lab.rotation_euler = (math.radians(90), 0, 0)
         link(lab, col)
-        mw = lab.matrix_world.copy()
-        lab.parent = root
-        lab.matrix_world = mw
+        parent_keep(lab, root)
 
         bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, 0))
         hood = bpy.context.active_object
         hood.name = f"MVP_Capuz_{old}"
-        hood.scale = (0.05, 0.04, 0.006)
+        hood.scale = (0.048, 0.038, 0.006)
         bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
         hood.data.materials.clear()
         hood.data.materials.append(M_HOOD)
         link(hood, inst if inst else col)
-        hpos = world + direction * 0.035
-        set_world(hood, rot3, hpos)
-        mw = hood.matrix_world.copy()
-        hood.parent = root
-        hood.matrix_world = mw
+        set_mw(hood, rot3, world + direction * 0.032)
+        parent_keep(hood, root)
 
-        print(f"  {label}: {tuple(round(v, 3) for v in world)} aim={tuple(round(v, 3) for v in direction)}")
+        print(f"  {label}: pos={tuple(round(v,3) for v in world)} dir={tuple(round(v,3) for v in direction)}")
 
-    # Cabos só na traseira + laço de folga
+    # Cabos: só rails do FIXO + laço de folga
     esp = bpy.data.objects.get("MVP_ESP32")
     if esp and inst:
-        B = esp.matrix_world.translation + Vector((0, 0, -0.04))
-        rail_z = 2.148
-        y_plus = 0.355 + YOFF
-        y_minus = -0.355 + YOFF
-        for old, label, pos in CORNERS:
+        B = esp.matrix_world.translation + Vector((0, 0, -0.035))
+        rail_z = 2.145
+        y_plus, y_minus = 0.355 + YOFF, -0.355 + YOFF
+        for old, label, pos in SENSORS:
             tgt = pos + Vector((0, YOFF, 0))
-            offs = {"Esquerdo": -0.03, "Central": 0.0, "Direito": 0.03}[old]
+            offs = {"Esquerdo": -0.028, "Central": 0.0, "Direito": 0.028}[old]
             p0 = B + Vector((offs, 0, 0))
-            p_loop = B + Vector((offs, -0.10, 0.08))  # folga
-            p_rail = Vector((min(B.x, -0.4) + offs * 0.2, y_plus + 0.03, rail_z))
-            pts = [p0, p_loop, p_rail]
+            p_slack = B + Vector((offs, -0.12, 0.10))  # folga
+            # sobe para rail +Y (lado do painel) sem entrar na extensão
+            p_up = Vector((min(B.x, FIXED_X_MAX - 0.05), y_plus + 0.025, rail_z))
+            pts = [p0, p_slack, p_up]
             if old == "Esquerdo":
                 pts += [
-                    Vector((-1.015, y_plus + 0.03, rail_z)),
-                    tgt + Vector((0.05, 0.05, -0.02)),
-                    tgt + Vector((0, 0, -0.02)),
+                    Vector((-1.015, y_plus + 0.025, rail_z)),
+                    tgt + Vector((0.04, 0.04, -0.02)),
+                    tgt + Vector((0, 0, -0.015)),
                 ]
             elif old == "Central":
                 pts += [
-                    Vector((-1.015, y_plus + 0.03, rail_z)),
-                    Vector((-1.015, y_minus - 0.03, rail_z)),
-                    tgt + Vector((0.05, -0.05, -0.02)),
-                    tgt + Vector((0, 0, -0.02)),
+                    Vector((-1.015, y_plus + 0.025, rail_z)),
+                    Vector((-1.015, y_minus - 0.025, rail_z)),
+                    tgt + Vector((0.04, -0.04, -0.02)),
+                    tgt + Vector((0, 0, -0.015)),
                 ]
-            else:  # Lateral_L em X=-0.533, Y=+
+            else:  # Frente_R_Fixo em (-Y)
                 pts += [
-                    Vector((-0.533, y_plus + 0.03, rail_z)),
-                    tgt + Vector((0.05, 0.05, -0.02)),
-                    tgt + Vector((0, 0, -0.02)),
+                    Vector((FIXED_X_MAX, y_plus + 0.025, rail_z)),
+                    Vector((FIXED_X_MAX, y_minus - 0.025, rail_z)),
+                    tgt + Vector((-0.04, -0.04, -0.02)),
+                    tgt + Vector((0, 0, -0.015)),
                 ]
+            # nenhum ponto de cabo com X > FIXED_X_MAX (não invade extensão)
+            for p in pts:
+                if p.x > FIXED_X_MAX + 0.02:
+                    p.x = FIXED_X_MAX
             cd = bpy.data.curves.new(f"MVP_Cabo_{old}_d", "CURVE")
             cd.dimensions = "3D"
-            cd.bevel_depth = 0.005
+            cd.bevel_depth = 0.0045
             cd.bevel_resolution = 2
             cd.fill_mode = "FULL"
             sp = cd.splines.new("POLY")
@@ -264,57 +325,65 @@ def rebuild_tof():
             if m:
                 o.data.materials.append(m)
             link(o, inst)
-            mw = o.matrix_world.copy()
-            o.parent = root
-            o.matrix_world = mw
+            parent_keep(o, root)
 
 
 def rebuild_us():
+    """Reposiciona grupos US (volumes no eixo +X) nos mesmos 3 cantos."""
     root = bpy.data.objects["SJIII_3226_ROOT"]
-    print("REAR_FIXED_MODEL US")
-    for old, label, pos in CORNERS:
+    print("=== REBUILD US (mesmos cantos) ===")
+    for old, label, pos in SENSORS:
         g = bpy.data.objects.get(f"Grupo_Sensor_{old}")
         if not g:
+            print("  missing", old)
             continue
-        direction = aim_toward_center(pos.x, pos.y)
-        rot3 = direction.to_track_quat("X", "Z").to_matrix()
-        mw = rot3.to_4x4()
-        mw.translation = pos
-        g.matrix_world = mw
+        direction = aim_up_to_fixed_center(pos.x, pos.y)
+        rot3 = direction.to_track_quat("X", "Z").to_matrix()  # US mesh: feixe +X
+        set_mw(g, rot3, pos)
         g["corner"] = label
-        g["zone"] = "traseira_fixa"
+        g["fixed_only"] = True
         if g.parent != root:
-            mw2 = g.matrix_world.copy()
-            g.parent = root
-            g.matrix_world = mw2
+            parent_keep(g, root)
         lab = bpy.data.objects.get(f"Label_Sensor_{old}")
         if lab:
             lab.parent = None
-            lab.location = pos + Vector((0.03, 0.03, 0.07))
+            lab.location = pos + Vector((0.02, -0.02, 0.06))
             lab.rotation_euler = (math.radians(90), 0, 0)
             lab.data.body = f"US {label}"
-            lab.data.size = 0.032
-            mw = lab.matrix_world.copy()
-            lab.parent = root
-            lab.matrix_world = mw
-        print(f"  {label}: {tuple(round(v, 3) for v in pos)}")
+            lab.data.size = 0.03
+            parent_keep(lab, root)
+        print(f"  {label}: {tuple(round(v,3) for v in pos)}")
+
+
+def print_dirs_for_config():
+    print("--- SENSOR_DIR for config.h ---")
+    for old, label, pos in SENSORS:
+        d = aim_up_to_fixed_center(pos.x, pos.y)
+        print(
+            f"  // {label} {tuple(round(v,3) for v in pos)}\n"
+            f"  {{ {d.x: .4f}f, {d.y: .4f}f, {d.z: .4f}f }},"
+        )
 
 
 def main():
+    rebuild_extension_markers()
     rebuild_tof()
     rebuild_us()
+    print_dirs_for_config()
     bpy.context.view_layer.update()
     bpy.ops.wm.save_mainfile()
-    for old, label, pos in CORNERS:
+
+    # sanity
+    for old, label, pos in SENSORS:
         g = bpy.data.objects[f"Grupo_Sensor_ToF_{old}"]
         s = bpy.data.objects[f"Sensor_ToF_{old}"]
         t = g.matrix_world.translation
-        assert t.x <= X_MAX_SENSOR + 1e-3, t
-        assert s.dimensions.x < 0.1
+        assert t.x < EXT_X0
+        assert abs(t.x - (pos.x)) < 0.02
+        assert s.dimensions.x < 0.08
         z = g.matrix_world.to_3x3() @ Vector((0, 0, 1))
-        assert z.z > 0.9
-        print("OK", label, tuple(round(v, 3) for v in t))
-    print("SANITY_PASS rear-only corners")
+        assert z.z > 0.95, z
+    print("SANITY_PASS: 3 cantos do retângulo FIXO")
 
 
 if __name__ == "__main__":
