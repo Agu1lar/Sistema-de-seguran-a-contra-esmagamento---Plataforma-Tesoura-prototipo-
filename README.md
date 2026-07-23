@@ -119,13 +119,13 @@ ESP32-S3 + TCA9548A + 3× VL53L1X + LEDs/buzzer/relé — ver SafeAlert MVP.
 
 ## Galeria
 
-### Vista geral — sistema ToF
+### Vista geral — cones de leitura
 
 ![Vista geral ToF](images/tof_vista_geral.png)
 
-### Detalhe do cesto e cones de leitura
+### Cobertura do cesto em planta (overlap dos FoVs)
 
-![Detalhe cesto ToF](images/tof_detalhe_cesto.png)
+![Detalhe cobertura do cesto](images/tof_detalhe_cesto.png)
 
 ### Comparativo na mesma cena (Ultrassônico × ToF)
 
