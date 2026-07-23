@@ -5,11 +5,11 @@
  *   h_i = s_i + r_i * u_i
  *   classificar: dentro do envelope do cesto? teto vs parede?
  *   reforçar com Δh da elevação
- *   só então aplicar faixas:
- *     d > 6.0          -> LIVRE
- *     3.5 < d <= 6.0   -> AMARELO
- *     1.5 < d <= 3.5   -> VERMELHO + buzzer
- *     d <= 1.5         -> BLOQUEIO (se geométrica recomendar)
+ *   só então aplicar faixas (folga operador 1,8 m):
+ *     d > 2.50          -> LIVRE
+ *     1.20 < d <= 2.50  -> AMARELO
+ *     0.60 < d <= 1.20  -> VERMELHO + buzzer (ainda sobe)
+ *     d <= 0.60         -> BLOQUEIO (colisão iminente)
  *
  * Hardware exemplo: HC-SR04 (3x). SafeAlert MVP: VL53L1X + TCA9548A.
  */
@@ -190,8 +190,8 @@ void setup() {
   Serial.begin(115200);
   delay(200);
   Serial.println();
-  Serial.println(F("SafeAlert ESP32 — modelo geometrico forte"));
-  Serial.println(F("Pipeline: hit = s + r*u | envelope | teto/parede | faixas"));
+  Serial.println(F("SafeAlert ESP32 — folga operador 1.8m | bloqueio @ 0.60m"));
+  Serial.println(F("Faixas: >2.50 livre | 1.20 amarelo | 0.60 vermelho | <=0.60 bloqueio"));
 
   for (int i = 0; i < NUM_SENSORES; i++) {
     pinMode(PIN_TRIG[i], OUTPUT);

@@ -27,7 +27,8 @@ Requisitos: Blender 4.x / 5.x recomendado.
 | Desafio central | Geometria do FoV e cobertura do volume do cesto |
 | Sensores (comparativo 3D) | Ultrassônico (lóbulo) × ToF VL53L1X (~27°) |
 | Controle (MVP) | ESP32-S3 + 3× VL53L1X + TCA9548A |
-| Atuação | LEDs, buzzer e relé (simulação de bloqueio de subida) |
+| Atuação | LEDs, buzzer e relé (bloqueio só em colisão iminente ~0,60 m) |
+| Operador de referência | Altura média **1,80 m** — máquina não trava na folga de trabalho |
 
 ### Por que os sensores ficam no topo?
 
@@ -54,7 +55,7 @@ Por isso o firmware usa:
 2) Envelope:      h_i ∈ V_colisao (prisma acima do cesto)?
 3) Plano:         teto (Z≈const) vs parede (X ou Y≈const)
 4) Elevação:      Δr ≈ −Δh → teto | Δr ≈ 0 → parede
-5) Severidade:    faixas 6,0 / 3,5 / 1,5 m  (só se estiver no escopo)
+5) Severidade:    faixas 2,5 / 1,2 / 0,6 m  (só se estiver no escopo; bloqueio só iminente)
 ```
 
 | Classe | Significado | Ação típica |
@@ -65,7 +66,33 @@ Por isso o firmware usa:
 | `PONTUAL_ESCOPO` | 1 hit dentro do envelope | alerta; bloqueio só se muito perto |
 | `INDEFINIDO` | 2+ hits no envelope sem plano claro | fail-safe (consenso) |
 
-Implementação: `esp32_anti_esmagamento/geometry.h` + `esp32_anti_esmagamento.ino`.
+### Modelo de folga do operador (arquitetura de distâncias)
+
+A máquina **não pode travar na altura normal de trabalho**. O operador precisa conseguir alcançar o objeto acima (teto, viga, ponto de serviço).
+
+**Hipóteses:**
+- Altura média do operador: \(H_{op} = 1{,}80\,\mathrm{m}\)
+- Sensor no topo do guarda-corpo: \(H_s \approx 1{,}01\,\mathrm{m}\) acima do piso do cesto
+- Distância medida: \(d\) = sensor → obstáculo acima
+- Folga aproximada sobre a cabeça:  
+  \(g \approx d - (H_{op} - H_s) = d - 0{,}79\,\mathrm{m}\)
+
+**Interpretação:**
+- Para trabalhar com folga razoável sobre a cabeça (\(g \gtrsim 0{,}40\,\mathrm{m}\)) → \(d \gtrsim 1{,}20\,\mathrm{m}\)
+- Distância piso do cesto → objeto ≈ \(H_s + d\); em \(d = 1{,}20\,\mathrm{m}\) isso dá ~\(2{,}2\,\mathrm{m}\) — compatível com pessoa de 1,8 m + braços
+- **Bloqueio só na iminência:** \(d \le 0{,}60\,\mathrm{m}\) (sensor → objeto)
+
+Assim, em área de trabalho alta (ex. até ~12 m de altura de serviço), a plataforma pode subir e o operador operar **sem** travamento precoce; o corte de subida só ocorre quando o obstáculo está **extremamente perto** do topo instrumentado.
+
+| Faixa \(d\) | Estado | Comportamento |
+|-------------|--------|----------------|
+| \(d > 2{,}50\,\mathrm{m}\) | LIVRE | Folga ampla — trabalho ok |
+| \(1{,}20 < d \le 2{,}50\,\mathrm{m}\) | AMARELO | Atenção — ainda sobe |
+| \(0{,}60 < d \le 1{,}20\,\mathrm{m}\) | VERMELHO | Aperto + buzzer — **ainda sobe** |
+| \(d \le 0{,}60\,\mathrm{m}\) | BLOQUEIO | Colisão iminente — **trava subida** |
+
+Histerese de liberação do bloqueio: **0,75 m**.  
+O filtro geométrico (envelope / teto × parede / elevação) continua **antes** dessas faixas.
 
 ### 1) Parede / fachada ao lado × obstáculo acima
 
@@ -157,7 +184,7 @@ O diagrama *“SafeAlert MVP — Arranjo Fictício na Protoboard”* está **con
 
 ### Atenções práticas (não invalidam o desenho)
 
-1. **Alcance do VL53L1X** — típico até ~**4 m** (alvo e luz dependentes). A faixa amarela de **6 m** é útil como lógica de produto, mas no hardware ToF pode não haver leitura confiável tão longe; trate 6 m como limiar lógico / meta, e calibere no ensaio.  
+1. **Alcance do VL53L1X** — típico até ~**4 m**. O envelope 3D externo usa 4 m; as faixas de alerta/bloqueio (2,5 / 1,2 / 0,6 m) cabem dentro desse alcance.  
 2. **Módulo relé SRD** — muitos são ativos em nível baixo e já trazem optoacoplador; confirme se o `IN` aceita 3,3 V do ESP32-S3.  
 3. **Pull-ups I2C** — placa do TCA9548A costuma já ter; evite empilhar pull-ups demais em cada breakout VL53.  
 4. **XSHUT (roxo no diagrama)** — com mux, não é obrigatório para multiplexar, mas ajuda a resetar sensores individualmente.  
@@ -168,9 +195,9 @@ O diagrama *“SafeAlert MVP — Arranjo Fictício na Protoboard”* está **con
 | Estado | LEDs / atuadores |
 |--------|------------------|
 | Normal / livre | Verde |
-| Atenção (`d ≤ 6 m`) | Amarelo |
-| Alerta (`d ≤ 3,5 m`) | Vermelho + buzzer |
-| Bloqueio (`d ≤ 1,5 m`) | Azul (bloqueio) + relé + buzzer |
+| Atenção (`d ≤ 2,5 m`) | Amarelo |
+| Alerta (`d ≤ 1,2 m`) | Vermelho + buzzer (**ainda sobe**) |
+| Bloqueio (`d ≤ 0,6 m`) | Azul + relé + buzzer |
 
 ---
 
@@ -271,15 +298,14 @@ Se estourar o teto: use **ESP32-WROOM-32 DevKit** (~R$ 35–50) no lugar do S3.
 ### Representação dos volumes no 3D
 
 **Ultrassônico:** envelope ~30° + lóbulo útil ~15° + zona crítica 0,5 m  
-**ToF:** camadas alinhadas à lógica do sistema (FoV ~27°):
+**ToF:** camadas alinhadas à lógica de folga do operador (FoV ~27°):
 
 | Camada | Alcance | Cor | Significado |
 |--------|---------|-----|-------------|
-| `Volume_ToF_Amarelo_*` | **4,0 m** | amarelo | alcance útil típico do VL53L1X / atenção |
-| `Volume_ToF_Vermelho_*` | **3,5 m** | vermelho | alerta + buzzer |
-| `Volume_ToF_Bloqueio_*` | **1,5 m** | azul | bloqueio de subida |
-
-> A faixa lógica de 6 m do firmware permanece como limiar de software; no 3D o envelope externo segue o **alcance útil realista (~4 m)** do sensor.  
+| `Volume_ToF_Alcance_*` | **4,0 m** | ciano suave | alcance útil típico VL53L1X |
+| `Volume_ToF_Amarelo_*` | **2,5 m** | amarelo | atenção — ainda trabalha/sobe |
+| `Volume_ToF_Vermelho_*` | **1,2 m** | vermelho | aperto + buzzer — ainda sobe |
+| `Volume_ToF_Bloqueio_*` | **0,6 m** | azul | **bloqueio** (iminente) |
 
 Empties de apuntamento:
 
@@ -307,7 +333,8 @@ Ler r0,r1,r2
   → h_i = s_i + r_i * u_i
   → contar hits em V_colisao
   → classificar FORA_ESCOPO | PAREDE | TETO | ...
-  → se ameaça no escopo: faixas 6,0 / 3,5 / 1,5
+  → se ameaça no escopo: faixas 2,5 / 1,2 / 0,6
+  → vermelho ainda SOBE; bloqueio só d≤0,60
   → se parede/fora: no máximo AMARELO (não bloqueia)
   → LEDs + buzzer + relé
 ```
@@ -316,12 +343,12 @@ Ler r0,r1,r2
 
 | Distância `d` (ameaça no envelope) | Estado | Ação |
 |-----------------------------------|--------|------|
-| `d > 6,0 m` | LIVRE | Verde |
-| `3,5 < d ≤ 6,0 m` | AMARELO | Atenção |
-| `1,5 < d ≤ 3,5 m` | VERMELHO | Alerta + buzzer |
-| `d ≤ 1,5 m` | BLOQUEIO | Relé + LED azul (se `bloqueioRecomendado`) |
+| `d > 2,50 m` | LIVRE | Verde — trabalho ok |
+| `1,20 < d ≤ 2,50 m` | AMARELO | Atenção — sobe |
+| `0,60 < d ≤ 1,20 m` | VERMELHO | Buzzer — **ainda sobe** |
+| `d ≤ 0,60 m` | BLOQUEIO | Relé + LED azul (iminente) |
 
-Histerese de liberação: **1,7 m**.
+Histerese de liberação: **0,75 m**.
 
 > **Aviso:** este é um protótipo de estudo. Sistema de segurança real em MEWP exige redundância, validação normativa e projeto fail-safe adequado — não substitua proteções certificadas do fabricante.
 

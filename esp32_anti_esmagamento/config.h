@@ -11,13 +11,30 @@
 #define PI 3.14159265f
 #endif
 
-// --- Faixas de severidade (metros), aplicadas APÓS filtro geométrico ---
-static const float DIST_AMARELO_M          = 6.0f;
-static const float DIST_VERMELHO_M         = 3.5f;
-static const float DIST_BLOQUEIO_M         = 1.5f;
-static const float DIST_LIBERA_BLOQUEIO_M  = 1.7f;
+// --- Modelo de folga do operador (arquitetura de distâncias) ---
+// Sensor no TOPO do guarda-corpo; operador médio no piso do cesto.
+// A máquina NÃO deve travar na altura de trabalho normal: o operador
+// precisa conseguir alcançar o objeto acima. Só bloqueia em colisão iminente.
+static const float H_OPERADOR_M           = 1.80f;  // altura média
+static const float H_SENSOR_ACIMA_DECK_M  = 1.01f;  // topo do rail ≈ 1 m acima do piso do cesto
+// Folga sobre a cabeça ≈ d - (H_OPERADOR - H_SENSOR_ACIMA_DECK)
+// Trabalho confortável: folga cabeça ≳ 0,40 m  =>  d ≳ 1,20 m
+// Bloqueio só em iminência: d ≤ 0,60 m (sensor → objeto)
 
-static const float DIST_MAX_VALIDA_M = 8.0f;
+// --- Faixas de severidade (metros), aplicadas APÓS filtro geométrico ---
+// LIVRE:     d > 2,50 m     (folga ampla para trabalhar)
+// AMARELO:   1,20 < d ≤ 2,50
+// VERMELHO:  0,60 < d ≤ 1,20  (apertado — alarme, ainda sobe)
+// BLOQUEIO:  d ≤ 0,60 m       (iminente)
+static const float DIST_AMARELO_M          = 2.50f;
+static const float DIST_VERMELHO_M         = 1.20f;
+static const float DIST_BLOQUEIO_M         = 0.60f;
+static const float DIST_LIBERA_BLOQUEIO_M  = 0.75f;  // histerese
+
+// Alcance útil típico VL53L1X (visualização / validação)
+static const float DIST_ALCANCE_UTIL_TOF_M = 4.00f;
+
+static const float DIST_MAX_VALIDA_M = 5.00f;
 static const float DIST_MIN_VALIDA_M = 0.03f;
 
 static const int NUM_SENSORES = 3;

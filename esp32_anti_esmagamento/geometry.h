@@ -14,7 +14,8 @@
 //   2) h_i ∈ V_colisao ?              (escopo da máquina)
 //   3) classificar plano teto/parede  (se 2+ hits)
 //   4) correlacionar com elevação Δh
-//   5) só então aplicar faixas 6 / 3.5 / 1.5
+//   5) só então aplicar faixas (folga op. 1,8 m):
+//        >2.50 livre | ≤2.50 amarelo | ≤1.20 vermelho | ≤0.60 bloqueio
 // ============================================================
 
 enum ClasseObstaculo {
