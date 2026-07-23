@@ -2,7 +2,7 @@
 
 Projeto de visualização 3D + lógica embarcada para um sistema de **detecção de obstáculos acima do cesto** em plataforma elevatória tipo tesoura, inspirado nas dimensões da **Skyjack SJIII 3226**.
 
-O foco é um protótipo didático (TCC / prova de conceito): sensores no **topo do guarda-corpo**, apontando para **cima**, comunicando com um **ESP32** que sinaliza faixas de risco e pode **bloquear a subida**.
+O foco é um projeto de **estudo e prototipagem**: sensores no **topo do guarda-corpo**, apontando para **cima**, comunicando com um **ESP32** que sinaliza faixas de risco e pode **bloquear a subida**.
 
 > **Premissa do projeto:** o desafio principal é **geométrico** (onde apontar, o que o FoV enxerga, como cobrir o volume do cesto sem confundir parede/operador). A montagem eletrônica é viável e relativamente direta — ver o arranjo SafeAlert MVP abaixo.
 
@@ -174,6 +174,77 @@ O diagrama *“SafeAlert MVP — Arranjo Fictício na Protoboard”* está **con
 
 ---
 
+## Componentes necessários (BOM do protótipo)
+
+Orçamento-alvo de hardware: **até ~R$ 400**.  
+O **ESP fica em caixa protegida perto do painel de controle no cesto**; os 3 ToF ficam espalhados no guarda-corpo (cabos ~1–3 m ao longo do rail — não descer a tesoura).
+
+### Núcleo eletrônico
+
+| Qtd | Componente | Função | Faixa R$ |
+|----:|------------|--------|----------|
+| 1 | ESP32-S3 DevKitC (N8R2 ou N16R8, USB-C) | Controle | 70–95 |
+| 3 | VL53L1X (módulo breakout) | Sensores ToF | 75–120 |
+| 1 | TCA9548A (mux I2C 8 canais) | 3 sensores no mesmo endereço | 15–25 |
+| 1 | Módulo relé 1 canal 5 V (com opto) | Simular bloqueio de subida (contatos secos) | 10–18 |
+| 1 | Buzzer ativo 5 V | Alarme sonoro | 3–8 |
+| 2 | Transistor NPN 2N2222 (ou BC547) | Driver do buzzer (+ reserva) | 1–3 |
+| 1 | Kit resistores (220 Ω, 1 kΩ, 10 kΩ) | LEDs, base do transistor, pull-ups | 8–15 |
+| 4–8 | LEDs 5 mm (verde, amarelo, vermelho, azul) | Estados | 3–6 |
+| 2–4 | Botões táteis | ACK + teste diário | 2–5 |
+| 1 | Fonte 5 V 2 A (USB/fonte parede ou buck) | Alimentação | 20–40 |
+
+### Cabos e instalação no cesto
+
+| Qtd | Componente | Função | Faixa R$ |
+|----:|------------|--------|----------|
+| 10–15 m | Cabo Cat5e/Cat6 | I2C em par trançado + 3V3/GND | 25–45 |
+| 6–10 pares | Conectores JST-XH / GX12 / bornes 4 vias | Desmontar sensores sem cortar cabo | 15–30 |
+| 1 kit | Espaguete / heat shrink + abraçadeiras | Proteção mecânica | 10–20 |
+| — | Fita 3M / clamps de trilho | Fixar módulos no guarda-corpo | 8–15 |
+
+### Proteção do ESP (junto ao painel)
+
+| Qtd | Componente | Função | Faixa R$ |
+|----:|------------|--------|----------|
+| 1 | Caixa plástica IP65 (~100×68×50 mm) | Proteger ESP + mux + relé | 20–35 |
+| 2–3 | Prensa-cabos PG7/PG9 | Entrada/saída de cabos | 5–10 |
+| 1 | Protoboard mini ou placa ilhada | Montagem interna | 8–20 |
+| 1 | Fusível 1 A + suporte (ou polyfuse) | Proteção de alimentação | 3–8 |
+
+### Totais estimados
+
+| Cenário | Total |
+|---------|------:|
+| Compra enxuta | ~R$ 300–350 |
+| Lojas BR + frete | ~R$ 360–400 |
+
+Se estourar o teto: use **ESP32-WROOM-32 DevKit** (~R$ 35–50) no lugar do S3.
+
+### Opcional (só se sobrar verba)
+
+| Item | Quando | Faixa R$ |
+|------|--------|----------|
+| Extensor I2C (PCA9615 / P82B715) | Cabo > ~1,5–2 m ou leituras instáveis | 20–40 |
+| Buck 7–24 V → 5 V | Alimentar da bateria 12/24 V da máquina | 15–30 |
+
+### Arquitetura física
+
+```text
+[Caixa IP65 no painel do CESTO]
+  ESP32-S3 + TCA9548A + relé + buzzer + LEDs/botões
+           |
+     Cat6: 3V3, GND, SDA, SCL  (+ XSHUT opcional)
+           |
+    ┌──────┼──────────────┐
+  ToF S1  ToF S2        ToF S3
+  ponta   meio          ponta
+```
+
+**Notas:** I2C não gosta de cabo longo — use Cat6, clock baixo (~50 kHz) e GND comum 3V3/5V. O firmware atual ainda lê HC-SR04 por GPIO; a porta para VL53L1X+TCA9548A está no roadmap.
+
+---
+
 ## Modelo 3D (Blender)
 
 ### Dimensões da SJIII 3226 (recolhida, rails up)
@@ -244,7 +315,7 @@ Ler r0,r1,r2
 
 Histerese de liberação: **1,7 m**.
 
-> **Aviso:** este é um protótipo didático. Sistema de segurança real em MEWP exige redundância, validação normativa e projeto fail-safe adequado — não substitua proteções certificadas do fabricante.
+> **Aviso:** este é um protótipo de estudo. Sistema de segurança real em MEWP exige redundância, validação normativa e projeto fail-safe adequado — não substitua proteções certificadas do fabricante.
 
 ---
 
@@ -306,4 +377,4 @@ Histerese de liberação: **1,7 m**.
 
 ## Licença / uso
 
-Projeto acadêmico / demonstração sob **GPLv3** (`LICENSE`). O modelo 3D e o firmware são fornecidos para estudo e desenvolvimento. Não utilizar como único meio de proteção em operação real sem validação de segurança.
+Projeto de **estudo e prototipagem** sob **GPLv3** (`LICENSE`). O modelo 3D e o firmware são fornecidos para aprendizado e desenvolvimento. Não utilizar como único meio de proteção em operação real sem validação de segurança.
