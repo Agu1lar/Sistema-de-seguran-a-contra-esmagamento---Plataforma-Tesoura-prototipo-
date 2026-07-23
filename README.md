@@ -213,6 +213,33 @@ Neste protótipo os sensores apontam **para cima** (teto / estrutura acima do ce
 
 **Regra de projeto:** leitura inválida ou ambient saturado → tratar como **ameaça / bloquear subida** (estado seguro), nunca como “livre”. Filtro externo pode ser experimento de hardware; **não** contar com ele para recuperar os 4 m sob sol.
 
+### Chuva, poeira e sujeira na óptica
+
+Obra e outdoor acumulam **água, lama e pó** no caminho óptico. O VL53L1X precisa de janela limpa (cover glass / abertura do módulo); qualquer filme opaco ou gota no FoV mexe na distância medida.
+
+| Situação | Efeito típico no ToF | Efeito no circuito (ESP / mux / relé) |
+|----------|----------------------|--------------------------------------|
+| **Poeira / cimento / lama no sensor** | Atenua ou bloqueia o retorno IR → alcance cai, distância “fantasma”, ou status de falha; sujeira grossa pode parecer **alvo muito perto** (falso bloqueio) ou **sem eco** (falso livre se o firmware ignorar falha) | Pouco, se a eletrônica estiver selada; pó fino em conectores abertos → mau contato I2C |
+| **Gotas / chuva na janela** | Refração/espalhamento; leituras instáveis; película d’água ≈ alvo próximo | Água na protoboard / DevKit → curto, corrosão, reset aleatório |
+| **Condensação interna** | Embaça a face interna do cover | Mesmo risco elétrico + oxidação |
+
+**Prevenção (mecânica — o que mais importa)**
+
+1. **Eletrônica em caixa IP65** (já no BOM) com prensa-cabos / gland — ESP, TCA9548A e relé **não** ficam expostos. Protoboard aberta = só bancada.  
+2. **Sensores em cápsula própria** (mini housing IP65/IP67) com **cover glass** compatível com 940 nm (acrílico/policarbonato IR-pass ou vidro especificado pela ST — espessura e air-gap conforme AN da ST).  
+3. **Capuz + pingente / borda de gotejamento** — reduz chuva direta e poeira sedimentando na face óptica (combina com a sombra anti-sol). Apontar para cima piora acúmulo de poeira e água na janela.  
+4. **Inclinação leve da face** (se a geometria permitir) para escoar água; evitar “poça” sobre o sensor.  
+5. **Limpeza periódica** no checklist do teste diário (pano macio; sem abrasivo que risque o cover). Em obra, poeira no sensor é evento esperado, não exceção.
+
+**Prevenção (elétrica / firmware)**
+
+- Conformal coating na PCB do produto; evitar DevKit nu no campo.  
+- Monitorar **signal rate / range status**: queda persistente de sinal em todos os canais com histórico de uso → suspeita de **sujeira**, não só de teto longe.  
+- Autoteste diário: se eco de referência (guarda-corpo / alvo conhecido) sumir → **não liberar subida** até limpeza/ACK.  
+- Cabos com alívio e entrada selada; conectores IP ou dentro da caixa.
+
+**Escopo do MVP:** caixa IP65 para o núcleo; sensores em breakout ainda vulneráveis até haver housing + cover. Ensaio de campo deve incluir **poeira na janela** e **gotas** de propósito, para ver falso bloqueio vs falha muda.
+
 ### Limites elétricos e de norma (protótipo ≠ produto)
 
 Este MVP **reconhece** os cuidados básicos de interface (transistor no buzzer, relé a contatos secos, trilhos 3V3/5V). Isso **não** é projeto de segurança funcional de MEWP. De forma deliberada e explícita:
@@ -241,7 +268,7 @@ Este MVP **reconhece** os cuidados básicos de interface (transistor no buzzer, 
 ## Componentes necessários (BOM do protótipo)
 
 Orçamento-alvo de hardware: **até ~R$ 400**.  
-O **ESP fica em caixa protegida perto do painel de controle no cesto**; os 3 ToF ficam espalhados no guarda-corpo (cabos ~1–3 m ao longo do rail — não descer a tesoura).
+O **ESP fica em caixa protegida perto do painel de controle no cesto**; os 3 ToF ficam espalhados no guarda-corpo (cabos ~1–3 m ao longo do rail — não descer a tesoura). Em campo, breakouts ToF sem housing sofrem **chuva/poeira na óptica** — ver seção correspondente.
 
 ### Núcleo eletrônico
 
@@ -291,6 +318,8 @@ Se estourar o teto: use **ESP32-WROOM-32 DevKit** (~R$ 35–50) no lugar do S3.
 |------|--------|----------|
 | Extensor I2C (PCA9615 / P82B715) | Cabo > ~1,5–2 m ou leituras instáveis | 20–40 |
 | Buck 7–24 V → 5 V | Alimentar da bateria 12/24 V da máquina | 15–30 |
+| 3× mini housing IP65 + cover IR-pass | Campo com chuva/poeira nos ToF | 30–60 |
+| Capuz / viseira impressa (PETG) | Sombra + gotejamento na óptica | 0–15 (filament) |
 
 ### Arquitetura física
 
@@ -438,6 +467,7 @@ Histerese de liberação: **0,75 m** (`DIST_LIBERA_BLOQUEIO_M`).
 - [ ] Autoteste diário + ACK no firmware  
 - [ ] Ensaios de FoV junto à fachada (validar envelope)  
 - [ ] Ensaios sob **sol direto** vs sombra: status/ambient do VL53L1X, alcance útil real, capuz mecânico (± filtro 940 nm externo como experimento)  
+- [ ] Housing + cover glass nos ToF; ensaio **poeira na janela** / gotas; checklist de limpeza no teste diário  
 - [ ] Multilateração só para alvos pontuais compartilhados (opcional)  
 - [ ] *(Produto, fora do MVP)* Esboço de arquitetura dual-channel + isolamento na interface de bloqueio; mapear requisitos EN 280 / ISO 13849
 
