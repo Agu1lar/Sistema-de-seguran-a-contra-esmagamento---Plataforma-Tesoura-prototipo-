@@ -1,0 +1,22 @@
+# Blender
+*.blend1
+*.blend2
+__pycache__/
+
+# OS / editor
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.idea/
+.cursor/
+
+# ESP32 / Arduino build
+esp32_anti_esmagamento/build/
+*.elf
+*.bin
+*.map
+
+# Env / secrets
+.env
+*.pem
