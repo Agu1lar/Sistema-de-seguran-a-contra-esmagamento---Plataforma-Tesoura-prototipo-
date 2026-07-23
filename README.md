@@ -39,66 +39,74 @@ Com a montagem no **alto do cesto** (e não no piso), o feixe olha para o espaç
 
 O circuito (ESP32 + ToF + relé) é a parte mais “padrão”. O que realmente define se o sistema funciona no campo é a **geometria**.
 
+### Modelo forte adotado (não é trilateração clássica)
+
+Trilateração clássica assume **um mesmo ponto** \(P\) visto por 3 sensores.  
+Com ToF/US no cesto isso quase nunca ocorre:
+
+- teto plano → cada sensor vê um **ponto diferente** do mesmo plano  
+- parede lateral → em geral **só um** FoV “raspa” a fachada  
+
+Por isso o firmware usa:
+
+```text
+1) Hit point:     h_i = s_i + r_i * u_i
+2) Envelope:      h_i ∈ V_colisao (prisma acima do cesto)?
+3) Plano:         teto (Z≈const) vs parede (X ou Y≈const)
+4) Elevação:      Δr ≈ −Δh → teto | Δr ≈ 0 → parede
+5) Severidade:    faixas 6,0 / 3,5 / 1,5 m  (só se estiver no escopo)
+```
+
+| Classe | Significado | Ação típica |
+|--------|-------------|-------------|
+| `FORA_ESCOPO` | impacto fora do volume da máquina | monitorar (no máx. amarelo) |
+| `PAREDE` | plano vertical / distância estável na subida | **não** bloquear subida |
+| `TETO` | plano horizontal / fecha com a elevação | faixas + bloqueio se consenso |
+| `PONTUAL_ESCOPO` | 1 hit dentro do envelope | alerta; bloqueio só se muito perto |
+| `INDEFINIDO` | 2+ hits no envelope sem plano claro | fail-safe (consenso) |
+
+Implementação: `esp32_anti_esmagamento/geometry.h` + `esp32_anti_esmagamento.ino`.
+
 ### 1) Parede / fachada ao lado × obstáculo acima
 
 **Problema**  
-Sensor 1D só devolve distância. Perto de um prédio, o FoV pode “raspar” a fachada e gerar alerta/bloqueio **mesmo sem teto** no caminho de subida.
+Sensor 1D só devolve distância. Perto de um prédio, o FoV pode “raspar” a fachada.
 
-**Por que é geométrico**  
-Depende do ângulo de montagem, da abertura do FoV (~27° no VL53L1X) e da proximidade lateral da máquina à parede.
-
-**Soluções**
-| Abordagem | Ideia |
-|-----------|--------|
-| Montagem | Apontar predominantemente para **cima**; inclinar pontas só o necessário (ex.: **7° para dentro** do cesto), evitando abrir FoV para a fachada |
-| Envelope virtual | Só tratar como ameaça o que intersecta o prisma acima do cesto |
-| Elevação da tesoura | Se `d` **cai junto com a subida** → tende a ser teto/viga; se `d` fica **quase constante** → tende a ser lateral |
-| Consenso | Preferir bloqueio duro com **2+ sensores** concordando (ou central + boa qualidade) |
+**Solução no projeto**
+- pontos de impacto \(h_i\) fora de \(V_{\text{colisão}}\) → `FORA_ESCOPO`  
+- plano vertical ou \(\Delta r \approx 0\) com subida → `PAREDE`  
+- montagem com FoV para cima e pontas a **7° para dentro** (cobertura do cesto, não da fachada)
 
 ### 2) Operador e ferramentas dentro do cesto
 
 **Problema**  
-Braço, capacete ou ferramenta entrando no FoV pode parecer “obstáculo acima”.
+Braço/ferramenta no FoV pode parecer obstáculo.
 
-**Por que a geometria resolve a maior parte**  
-Com sensores **no topo do guarda-corpo**, o corpo do operador fica **abaixo** do plano de emissão. O falso positivo só aparece se algo entrar no cone para cima.
+**Solução**
+- sensores no **topo** do guarda-corpo (operador abaixo do plano de emissão)  
+- ToF com FoV ~27° (menos “varredura” que US largo)  
+- faixas aplicadas ao que está **acima do sensor**, não ao piso do cesto
 
-**Soluções**
-| Abordagem | Ideia |
-|-----------|--------|
-| Montagem no topo | Principal mitigação — não olhar o interior do cesto |
-| FoV estreito (ToF) | Menos “varredura” lateral que ultrassônico largo |
-| Lógica por faixas | Não há “ignorar 0–2 m do piso”; as faixas valem para o que está **acima do sensor** |
-| Evolução | ROI/multizona ToF ou filtro temporal (alvo móvel × estático), se ensaios pedirem |
+### 3) Cobertura do volume do cesto
 
-### 3) Cobertura incompleta do volume do cesto
-
-**Problema**  
-Três sensores alinhados na mesma lateral deixam “buracos” de cobertura.
-
-**Solução geométrica adotada no modelo 3D**  
-Disposição **escalonada** (não colinear):
+**Solução geométrica no modelo 3D** — disposição **escalonada** (não colinear):
 
 1. **Ponta A** — uma extremidade / fundo  
 2. **Meio** — lateral de referência, **reto para cima**  
-3. **Ponta B** — outra extremidade, em profundidade intermediária  
+3. **Ponta B** — outra extremidade, profundidade intermediária  
 
 Pontas com **7° para dentro** → interseção dos cones acima da área de trabalho.
 
-### 4) Ultrassônico × ToF (comparativo)
+### 4) Ultrassônico × ToF
 
 | | Ultrassônico | ToF (VL53L1X) |
 |--|--------------|---------------|
-| Forma do volume | Lóbulo suave (~15° útil + envelope ~30°) | Cone óptico mais nítido (~27°) |
-| Multipath / eco | Mais sensível | Melhor em muitos cenários |
-| Endereço I2C | N/A (GPIO) | Todos iguais → precisa mux ou XSHUT |
-| Papel no projeto | Referência de campo acústico no Blender | Caminho preferido do MVP eletrônico |
+| Forma do volume | Lóbulo ~15° útil + envelope ~30° | Cone óptico ~27° |
+| Papel | Referência acústica no Blender | Caminho preferido do MVP |
 
-### 5) Circuito / integração (secundário, mas necessário)
+### 5) Circuito (secundário)
 
-**Problema menor:** ler 3× VL53L1X (mesmo endereço `0x29`), acionar LEDs/buzzer/relé com segurança elétrica básica.
-
-**Solução do MVP SafeAlert:** ESP32-S3 + multiplexador I2C **TCA9548A** + saídas com transistor/relé — ver seção abaixo.
+ESP32-S3 + TCA9548A + 3× VL53L1X + LEDs/buzzer/relé — ver SafeAlert MVP.
 
 ---
 
@@ -196,35 +204,38 @@ Empties de apuntamento:
 
 ## Lógica embarcada (ESP32)
 
-Código atual do protótipo (base HC-SR04; evoluir para VL53L1X + TCA9548A do SafeAlert MVP):
+Código do protótipo com **classificador geométrico**:
 
 📁 [`esp32_anti_esmagamento/`](./esp32_anti_esmagamento/)
 
-- `esp32_anti_esmagamento.ino` — máquina de estados  
-- `config.h` — pinos e limiares  
+| Arquivo | Função |
+|---------|--------|
+| `config.h` | Faixas, pinos, poses \(s_i, u_i\), envelope do cesto |
+| `geometry.h` | Hit points, envelope, teto/parede, elevação, consenso |
+| `esp32_anti_esmagamento.ino` | Leitura, máquina de estados, saídas |
 
-### Faixas de distância
-
-Sensores no **topo**, apontando para **cima**. Usa-se a **menor distância válida** entre os 3 canais:
-
-| Distância `d` | Estado | Ação |
-|---------------|--------|------|
-| `d > 6,0 m` | LIVRE | Verde / sem alerta |
-| `3,5 < d ≤ 6,0 m` | AMARELO | Atenção |
-| `1,5 < d ≤ 3,5 m` | VERMELHO | Alerta + buzzer |
-| `d ≤ 1,5 m` | BLOQUEIO | Bloqueia subida (relé) |
-
-Histerese de liberação do bloqueio: **1,7 m** (evita oscilação).
-
-### Fluxo
+### Pipeline
 
 ```text
-Ler 3 sensores (mux I2C no MVP ToF)
-    → d = menor distância válida
-    → classificar faixa (6,0 / 3,5 / 1,5)
-    → LEDs + buzzer + relé de subida
-    → (evolução) correlacionar com elevação da tesoura
+Ler r0,r1,r2
+  → h_i = s_i + r_i * u_i
+  → contar hits em V_colisao
+  → classificar FORA_ESCOPO | PAREDE | TETO | ...
+  → se ameaça no escopo: faixas 6,0 / 3,5 / 1,5
+  → se parede/fora: no máximo AMARELO (não bloqueia)
+  → LEDs + buzzer + relé
 ```
+
+### Faixas de severidade (após geometria)
+
+| Distância `d` (ameaça no envelope) | Estado | Ação |
+|-----------------------------------|--------|------|
+| `d > 6,0 m` | LIVRE | Verde |
+| `3,5 < d ≤ 6,0 m` | AMARELO | Atenção |
+| `1,5 < d ≤ 3,5 m` | VERMELHO | Alerta + buzzer |
+| `d ≤ 1,5 m` | BLOQUEIO | Relé + LED azul (se `bloqueioRecomendado`) |
+
+Histerese de liberação: **1,7 m**.
 
 > **Aviso:** este é um protótipo didático. Sistema de segurança real em MEWP exige redundância, validação normativa e projeto fail-safe adequado — não substitua proteções certificadas do fabricante.
 
@@ -244,7 +255,8 @@ Ler 3 sensores (mux I2C no MVP ToF)
 │   └── safealert_mvp_protoboard.png
 └── esp32_anti_esmagamento/
     ├── esp32_anti_esmagamento.ino
-    └── config.h
+    ├── config.h
+    └── geometry.h
 ```
 
 ---
@@ -268,11 +280,11 @@ Ler 3 sensores (mux I2C no MVP ToF)
 
 ## Roadmap sugerido
 
-- [ ] Portar firmware para **VL53L1X + TCA9548A** (SafeAlert MVP)  
-- [ ] Entrada real de elevação da tesoura (encoder / sinal do comando)  
-- [ ] Classificador parede lateral × overhead  
+- [ ] Portar leitura para **VL53L1X + TCA9548A** (SafeAlert MVP)  
+- [ ] Entrada real de elevação da tesoura (encoder) para fortalecer \(\Delta r\) vs \(\Delta h\)  
 - [ ] Autoteste diário + ACK no firmware  
-- [ ] Ensaios de FoV junto à fachada (validar geometria)  
+- [ ] Ensaios de FoV junto à fachada (validar envelope)  
+- [ ] Multilateração só para alvos pontuais compartilhados (opcional)  
 
 ---
 

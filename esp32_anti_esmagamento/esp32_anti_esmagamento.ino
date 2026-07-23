@@ -1,21 +1,22 @@
 /**
- * Protótipo ESP32 — Anti-esmagamento plataforma elevatória
+ * SafeAlert / anti-esmagamento — ESP32
  *
- * Lógica (sensores no TOPO, apontando para CIMA):
- *   d > 6.0 m              -> LIVRE
- *   3.5 < d <= 6.0 m       -> AMARELO
- *   1.5 < d <= 3.5 m       -> VERMELHO + BUZZER
- *   d <= 1.5 m             -> BLOQUEAR SUBIDA
+ * Modelo geométrico forte (não é trilateração clássica de 1 ponto):
+ *   h_i = s_i + r_i * u_i
+ *   classificar: dentro do envelope do cesto? teto vs parede?
+ *   reforçar com Δh da elevação
+ *   só então aplicar faixas:
+ *     d > 6.0          -> LIVRE
+ *     3.5 < d <= 6.0   -> AMARELO
+ *     1.5 < d <= 3.5   -> VERMELHO + buzzer
+ *     d <= 1.5         -> BLOQUEIO (se geométrica recomendar)
  *
- * Usa a MENOR distância válida entre os 3 sensores.
- * Opcional: correlacionar com “subindo” para filtrar parede lateral depois.
- *
- * Hardware exemplo: ESP32 + 3x HC-SR04 + LEDs + buzzer + relé
- * (Troque lerUltrassonico() por ToF VL53L1X se quiser.)
+ * Hardware exemplo: HC-SR04 (3x). SafeAlert MVP: VL53L1X + TCA9548A.
  */
 
 #include <Arduino.h>
 #include "config.h"
+#include "geometry.h"
 
 enum EstadoSeguranca {
   LIVRE = 0,
@@ -25,8 +26,16 @@ enum EstadoSeguranca {
 };
 
 EstadoSeguranca estado = LIVRE;
-float distMinM = DIST_MAX_VALIDA_M;
+DiagnosticoGeometrico diag{};
+float distAmeacaM = NAN;
 bool bloqueioAtivo = false;
+
+float rAtual[NUM_SENSORES];
+float rPrev[NUM_SENSORES];
+HitPoint hits[NUM_SENSORES];
+
+float alturaAtualM = 0.0f;
+float alturaPrevM = 0.0f;
 
 unsigned long ultimoLoopMs = 0;
 unsigned long buzzerTickMs = 0;
@@ -41,12 +50,8 @@ float lerUltrassonicoCm(int trigPin, int echoPin) {
   delayMicroseconds(10);
   digitalWrite(trigPin, LOW);
 
-  // timeout ~30 ms (~5 m ida/volta com folga)
   unsigned long duracao = pulseIn(echoPin, HIGH, 30000UL);
-  if (duracao == 0) {
-    return NAN;
-  }
-  // som ~343 m/s => cm = us / 58
+  if (duracao == 0) return NAN;
   return duracao / 58.0f;
 }
 
@@ -61,87 +66,93 @@ float lerSensorMetros(int idx) {
     }
     delay(5);
   }
-  if (ok == 0) {
-    return NAN;
-  }
-  return (soma / ok) / 100.0f;  // m
+  if (ok == 0) return NAN;
+  return (soma / ok) / 100.0f;
 }
 
-float menorDistanciaValida() {
-  float melhor = NAN;
-  for (int i = 0; i < 3; i++) {
-    float d = lerSensorMetros(i);
-    if (isnan(d)) {
-      continue;
-    }
-    if (d < DIST_MIN_VALIDA_M || d > DIST_MAX_VALIDA_M) {
-      continue;
-    }
-    if (isnan(melhor) || d < melhor) {
-      melhor = d;
-    }
+void lerTodosSensores() {
+  for (int i = 0; i < NUM_SENSORES; i++) {
+    rPrev[i] = rAtual[i];
+    rAtual[i] = lerSensorMetros(i);
+    hits[i] = calcularHit(i, rAtual[i], rPrev[i]);
   }
-  return melhor;
 }
 
-// -------------------- Máquina de estados --------------------
+// -------------------- Elevação --------------------
 
-EstadoSeguranca decidirEstado(float d, bool jaBloqueado) {
-  // Sem leitura válida: fail-safe -> bloqueio (protótipo conservador)
+float lerAlturaPlataformaM() {
+  if (PIN_ALTURA_ANALOG >= 0) {
+    // Exemplo: mapear 0..3.3V -> 0..8 m (ajuste à sua calibração)
+    int raw = analogRead(PIN_ALTURA_ANALOG);
+    return (raw / 4095.0f) * 8.0f;
+  }
+  // Sem sensor de altura: Δh=0 → classificador usa envelope/planos
+  return alturaAtualM;
+}
+
+bool plataformaSubindo(float deltaH) {
+  if (USAR_SINAL_SUBINDO) {
+    return digitalRead(PIN_SUBINDO) == HIGH;
+  }
+  (void)deltaH;
+  return true;  // protótipo: sempre avalia geometria
+}
+
+// -------------------- Severidade (faixas) --------------------
+
+EstadoSeguranca severidadePorDistancia(float d, bool jaBloqueado) {
   if (isnan(d)) {
-    return BLOQUEIO;
+    // Sem ameaça geométrica medida: livre (leituras inválidas já tratadas à parte)
+    return LIVRE;
   }
 
-  // Histerese do bloqueio
   if (jaBloqueado) {
     if (d > DIST_LIBERA_BLOQUEIO_M) {
-      // cai para a faixa correspondente abaixo
+      // libera histerese e reclassifica abaixo
     } else {
       return BLOQUEIO;
     }
   }
 
-  if (d <= DIST_BLOQUEIO_M) {
-    return BLOQUEIO;
-  }
-  if (d <= DIST_VERMELHO_M) {
-    return VERMELHO;
-  }
-  if (d <= DIST_AMARELO_M) {
-    return AMARELO;
-  }
+  if (d <= DIST_BLOQUEIO_M) return BLOQUEIO;
+  if (d <= DIST_VERMELHO_M) return VERMELHO;
+  if (d <= DIST_AMARELO_M)  return AMARELO;
   return LIVRE;
 }
 
-bool plataformaSubindo() {
-  if (!USAR_SINAL_SUBINDO) {
-    return true;  // no protótipo, sempre avalia
+EstadoSeguranca decidirEstado(const DiagnosticoGeometrico& g, bool jaBloqueado) {
+  // Fail-safe: se esperávamos leituras e todas caíram, bloqueia
+  // (no protótipo só quando já havia bloqueio / ameaça recente — evite travar no boot sem alvos)
+  if (g.classe == CLASSE_NENHUM) {
+    return jaBloqueado ? BLOQUEIO : LIVRE;
   }
-  return digitalRead(PIN_SUBINDO) == HIGH;
-}
 
-/**
- * Esboço para o problema da parede lateral (próxima evolução):
- * se estiver subindo e a distância quase NÃO muda, tende a ser lateral.
- * Aqui só documentado — não altera o bloqueio ainda.
- */
-bool pareceParedeLateral(float dAtual, float dAnterior, float deltaAlturaM) {
-  if (isnan(dAtual) || isnan(dAnterior) || deltaAlturaM < 0.05f) {
-    return false;
+  // Parede / fora do escopo: NÃO sobe severidade de bloqueio
+  if (g.classe == CLASSE_FORA_ESCOPO || g.classe == CLASSE_PAREDE) {
+    EstadoSeguranca s = severidadePorDistancia(g.dAmeaca, false);
+    // no máximo AMARELO fraco para monitorar (sem bloqueio)
+    if (s == BLOQUEIO || s == VERMELHO) return AMARELO;
+    return s;
   }
-  float fechaEsperado = deltaAlturaM;      // teto: d cai ~ com a subida
-  float fechou = dAnterior - dAtual;
-  // se quase não fechou, provavelmente lateral
-  return fabsf(fechou) < (0.25f * fechaEsperado);
+
+  // Teto / pontual no envelope / indefinido com consenso
+  EstadoSeguranca s = severidadePorDistancia(g.dAmeaca, jaBloqueado);
+
+  if (s == BLOQUEIO && !g.bloqueioRecomendado) {
+    // geometria não confirma bloqueio duro → desce um nível
+    return VERMELHO;
+  }
+  return s;
 }
 
 // -------------------- Atuadores --------------------
 
 void aplicarSaidas(EstadoSeguranca e) {
+  digitalWrite(PIN_LED_VERDE,    (e == LIVRE) ? HIGH : LOW);
   digitalWrite(PIN_LED_AMARELO,  (e == AMARELO || e == VERMELHO || e == BLOQUEIO) ? HIGH : LOW);
   digitalWrite(PIN_LED_VERMELHO, (e == VERMELHO || e == BLOQUEIO) ? HIGH : LOW);
+  digitalWrite(PIN_LED_AZUL,     (e == BLOQUEIO) ? HIGH : LOW);
 
-  // Bloqueio de subida
   bool permitirSubida = (e != BLOQUEIO);
   if (RELE_HIGH_PERMITE_SUBIDA) {
     digitalWrite(PIN_BLOQUEIO_SUBIDA, permitirSubida ? HIGH : LOW);
@@ -149,7 +160,6 @@ void aplicarSaidas(EstadoSeguranca e) {
     digitalWrite(PIN_BLOQUEIO_SUBIDA, permitirSubida ? LOW : HIGH);
   }
 
-  // Buzzer só em vermelho/bloqueio
   if (e == VERMELHO || e == BLOQUEIO) {
     unsigned long agora = millis();
     unsigned long fase = buzzerFaseOn ? BUZZER_BEEP_ON_MS : BUZZER_BEEP_OFF_MS;
@@ -166,11 +176,11 @@ void aplicarSaidas(EstadoSeguranca e) {
 
 const char* nomeEstado(EstadoSeguranca e) {
   switch (e) {
-    case LIVRE:     return "LIVRE";
-    case AMARELO:   return "AMARELO";
-    case VERMELHO:  return "VERMELHO";
-    case BLOQUEIO:  return "BLOQUEIO";
-    default:        return "?";
+    case LIVRE:    return "LIVRE";
+    case AMARELO:  return "AMARELO";
+    case VERMELHO: return "VERMELHO";
+    case BLOQUEIO: return "BLOQUEIO";
+    default:       return "?";
   }
 }
 
@@ -180,17 +190,21 @@ void setup() {
   Serial.begin(115200);
   delay(200);
   Serial.println();
-  Serial.println(F("ESP32 anti-esmagamento — prototipo"));
-  Serial.println(F("Faixas: 6.0 amarelo | 3.5 vermelho+buzzer | 1.5 bloqueio"));
+  Serial.println(F("SafeAlert ESP32 — modelo geometrico forte"));
+  Serial.println(F("Pipeline: hit = s + r*u | envelope | teto/parede | faixas"));
 
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < NUM_SENSORES; i++) {
     pinMode(PIN_TRIG[i], OUTPUT);
     pinMode(PIN_ECHO[i], INPUT);
     digitalWrite(PIN_TRIG[i], LOW);
+    rAtual[i] = NAN;
+    rPrev[i] = NAN;
   }
 
+  pinMode(PIN_LED_VERDE, OUTPUT);
   pinMode(PIN_LED_AMARELO, OUTPUT);
   pinMode(PIN_LED_VERMELHO, OUTPUT);
+  pinMode(PIN_LED_AZUL, OUTPUT);
   pinMode(PIN_BUZZER, OUTPUT);
   pinMode(PIN_BLOQUEIO_SUBIDA, OUTPUT);
 
@@ -198,8 +212,9 @@ void setup() {
     pinMode(PIN_SUBINDO, INPUT_PULLDOWN);
   }
 
-  // Fail-safe inicial: não permitir subida até primeira leitura boa
-  estado = BLOQUEIO;
+  // Boot: permite subida até haver ameaça classificada ( protótipo ).
+  // Em produto: preferir fail-safe BLOQUEIO até autoteste OK.
+  estado = LIVRE;
   aplicarSaidas(estado);
 }
 
@@ -210,26 +225,58 @@ void loop() {
   }
   ultimoLoopMs = agora;
 
-  distMinM = menorDistanciaValida();
-  estado = decidirEstado(distMinM, bloqueioAtivo);
+  alturaPrevM = alturaAtualM;
+  alturaAtualM = lerAlturaPlataformaM();
+  float deltaH = alturaAtualM - alturaPrevM;
+  if (deltaH < 0.0f) deltaH = 0.0f;
+
+  lerTodosSensores();
+  diag = classificarObstaculo(hits, NUM_SENSORES, deltaH);
+  distAmeacaM = diag.dAmeaca;
+
+  estado = decidirEstado(diag, bloqueioAtivo);
   bloqueioAtivo = (estado == BLOQUEIO);
-
-  // Se no futuro quiser só alertar parado e bloquear só subindo:
-  // if (!plataformaSubindo() && estado == BLOQUEIO) estado = VERMELHO;
-
   aplicarSaidas(estado);
 
   static unsigned long lastPrint = 0;
-  if (agora - lastPrint > 250) {
+  if (agora - lastPrint > 300) {
     lastPrint = agora;
-    Serial.print(F("d_min="));
-    if (isnan(distMinM)) {
-      Serial.print(F("NaN"));
-    } else {
-      Serial.print(distMinM, 2);
-      Serial.print(F(" m"));
+    Serial.print(F("classe="));
+    Serial.print(nomeClasse(diag.classe));
+    Serial.print(F(" hitsEnv="));
+    Serial.print(diag.hitsNoEnvelope);
+    Serial.print(F("/"));
+    Serial.print(diag.hitsValidos);
+    Serial.print(F(" d_ameaca="));
+    if (isnan(distAmeacaM)) Serial.print(F("NaN"));
+    else {
+      Serial.print(distAmeacaM, 2);
+      Serial.print(F("m"));
     }
-    Serial.print(F(" | estado="));
-    Serial.println(nomeEstado(estado));
+    Serial.print(F(" dH="));
+    Serial.print(deltaH, 3);
+    Serial.print(F(" estado="));
+    Serial.print(nomeEstado(estado));
+    Serial.print(F(" blkRec="));
+    Serial.println(diag.bloqueioRecomendado ? F("1") : F("0"));
+
+    for (int i = 0; i < NUM_SENSORES; i++) {
+      Serial.print(F("  S"));
+      Serial.print(i);
+      if (!hits[i].valido) {
+        Serial.println(F(": --"));
+        continue;
+      }
+      Serial.print(F(": r="));
+      Serial.print(hits[i].r, 2);
+      Serial.print(F(" h=("));
+      Serial.print(hits[i].h.x, 2);
+      Serial.print(F(","));
+      Serial.print(hits[i].h.y, 2);
+      Serial.print(F(","));
+      Serial.print(hits[i].h.z, 2);
+      Serial.print(F(") env="));
+      Serial.println(hits[i].noEnvelope ? F("1") : F("0"));
+    }
   }
 }
