@@ -75,7 +75,7 @@ Sensor 1D só devolve distância. Perto de um prédio, o FoV pode “raspar” a
 **Solução no projeto**
 - pontos de impacto \(h_i\) fora de \(V_{\text{colisão}}\) → `FORA_ESCOPO`  
 - plano vertical ou \(\Delta r \approx 0\) com subida → `PAREDE`  
-- montagem com FoV para cima e pontas a **7° para dentro** (cobertura do cesto, não da fachada)
+- montagem com FoV para cima; **meio ~10° in** e **pontas ~9° in** (melhor cobertura do cesto na zona 1,5–2,5 m)
 
 ### 2) Operador e ferramentas dentro do cesto
 
@@ -95,7 +95,14 @@ Braço/ferramenta no FoV pode parecer obstáculo.
 2. **Meio** — lateral de referência, **reto para cima**  
 3. **Ponta B** — outra extremidade, profundidade intermediária  
 
-Pontas com **7° para dentro** → interseção dos cones acima da área de trabalho.
+**Apontamento otimizado (cobertura do volume do cesto, FoV ~27°):**
+
+| Sensor | Inclinação |
+|--------|------------|
+| **Meio** | **~10° para dentro** do cesto |
+| **Pontas** | **~9° para dentro** + leve convergência longitudinal (~6°) |
+
+> 7° só nas pontas (meio a 0°) subcobria o footprint do cesto na faixa crítica 1,5–2,0 m. Simulação de cobertura elevou de ~53% → ~94% @ 2 m com meio a ~10° in.
 
 ### 4) Ultrassônico × ToF
 

@@ -59,10 +59,14 @@ static const Vec3 SENSOR_POS[NUM_SENSORES] = {
   {  1.015f,  0.000f, TOPO_RAIL_Z_M }
 };
 
+// Apontamento otimizado p/ cobertura do volume do cesto (FoV ~27°):
+// - Meio: ~10° para dentro (+Y)
+// - Pontas: ~9° para dentro + leve convergência longitudinal (~6°)
+// (7° só nas pontas e meio a 0° subcobria o cesto em 1,5–2,0 m)
 static const Vec3 SENSOR_DIR[NUM_SENSORES] = {
-  {  0.115f, -0.040f, 0.993f },
-  {  0.000f,  0.000f, 1.000f },
-  { -0.122f,  0.000f, 0.993f }
+  {  0.1045f, -0.1564f, 0.9821f },  // ponta A
+  {  0.0000f,  0.1736f, 0.9848f },  // meio
+  { -0.1564f,  0.0000f, 0.9877f }   // ponta B
 };
 
 // --- Pinos (SafeAlert MVP: evoluir para I2C + TCA9548A) ---
