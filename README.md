@@ -92,7 +92,7 @@ Braço/ferramenta no FoV pode parecer obstáculo.
 **Solução geométrica no modelo 3D** — disposição **escalonada** (não colinear):
 
 1. **Ponta A** — uma extremidade / fundo  
-2. **Meio** — lateral de referência, **reto para cima**  
+2. **Meio** — lateral de referência, **~10° para dentro**  
 3. **Ponta B** — outra extremidade, profundidade intermediária  
 
 **Apontamento otimizado (cobertura do volume do cesto, FoV ~27°):**
