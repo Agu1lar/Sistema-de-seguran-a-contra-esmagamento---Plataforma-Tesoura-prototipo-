@@ -40,16 +40,16 @@ static const float DIST_MIN_VALIDA_M = 0.03f;
 static const int NUM_SENSORES = 3;
 
 enum SensorId {
-  SENSOR_TRASEIRA_L = 0,  // canto traseiro +Y
-  SENSOR_TRASEIRA_R = 1,  // canto traseiro -Y
-  SENSOR_LATERAL_R  = 2   // poste rail -Y em X≈-0,53 (longe do limiar da extensão)
+  SENSOR_PONTA_A = 0,  // traseira, rail +Y (deck FIXO)
+  SENSOR_MEIO    = 1,  // meio do comprimento, rail -Y (deck FIXO)
+  SENSOR_PONTA_B = 2   // ponta dianteira — montado na Extension_Deck
 };
 
 // --- Geometria do cesto (metros) — alinhada ao modelo SJIII 3226 ---
-// Escopo MVP: só o DECK PRINCIPAL (fixo). A extensão roll-out (~+X,
-// X ≳ 0,105 m) fica FORA da cobertura — o operador pode estender o
-// deck sem mover sensores nem alterar a lógica de FoV do protótipo.
-static const float CESTO_SEMI_L_M       = 1.065f;  // semi-comprimento total (ref. OEM)
+// Cobertura: volume TOTAL do cesto (fixo + extensão recolhida).
+// Ponta_B vai junto com o roll-out (+X); poses abaixo = extensão RECOLHIDA.
+// Cabo da Ponta_B: laço de folga ≥ curso do roll-out (~0,9 m) a partir do deck fixo.
+static const float CESTO_SEMI_L_M       = 1.065f;  // semi-comprimento total
 static const float CESTO_SEMI_W_M       = 0.355f;
 static const float EXTENSAO_X_INICIO_M  = 0.105f;  // início da zona roll-out (+X)
 static const float TOPO_RAIL_Z_M        = 2.16f;
@@ -57,8 +57,8 @@ static const float MARGEM_ENVELOPE_M    = 0.15f;
 
 static const float ENVELOPE_Z_MIN_M = TOPO_RAIL_Z_M;
 static const float ENVELOPE_X_MIN_M = -(CESTO_SEMI_L_M + MARGEM_ENVELOPE_M);
-// Envelope de colisão PARA no limiar da extensão (não cobre o roll-out)
-static const float ENVELOPE_X_MAX_M =  (EXTENSAO_X_INICIO_M + MARGEM_ENVELOPE_M);
+// Envelope cobre o comprimento total do cesto (incl. ponta / extensão recolhida)
+static const float ENVELOPE_X_MAX_M =  (CESTO_SEMI_L_M + MARGEM_ENVELOPE_M);
 static const float ENVELOPE_Y_MIN_M = -(CESTO_SEMI_W_M + MARGEM_ENVELOPE_M);
 static const float ENVELOPE_Y_MAX_M =  (CESTO_SEMI_W_M + MARGEM_ENVELOPE_M);
 
@@ -75,21 +75,20 @@ struct Vec3 {
   float x, y, z;
 };
 
-// DISPOSIÇÃO: 3 sensores só na TRASEIRA do deck FIXO (X ≤ -0,50).
-// Nada no limiar fixo/extensão (X≈0,05) — a extensão abre sem interferir.
-//   Traseira L (-1.015,+0.355) | Traseira R (-1.015,-0.355) | Lateral R (-0.533,-0.355)
+// DISPOSIÇÃO ORIGINAL (cobertura da verticalidade / volume do cesto):
+//   Ponta_A (-1.015,+0.355) FIXO | Meio (0,-0.355) FIXO | Ponta_B (+1.015,0) na extensão
 // Blender ToF: +Z = SENSOR_DIR. US legado: +X = feixe.
 static const Vec3 SENSOR_POS[NUM_SENSORES] = {
-  { -1.015f,  0.355f, TOPO_RAIL_Z_M },  // Traseira L
-  { -1.015f, -0.355f, TOPO_RAIL_Z_M },  // Traseira R
-  { -0.533f, -0.355f, TOPO_RAIL_Z_M }   // Lateral R (poste, longe da extensão)
+  { -1.015f,  0.355f, TOPO_RAIL_Z_M },  // Ponta_A
+  {  0.000f, -0.355f, TOPO_RAIL_Z_M },  // Meio
+  {  1.015f,  0.000f, TOPO_RAIL_Z_M }   // Ponta_B (stowed; segue Extension_Deck)
 };
 
-// ~8° do vertical → centro da zona traseira
+// Aims originais (~convergência / cobertura do volume)
 static const Vec3 SENSOR_DIR[NUM_SENSORES] = {
-  {  0.0782f, -0.1151f, 0.9903f },  // Traseira L
-  {  0.0782f,  0.1151f, 0.9903f },  // Traseira R
-  { -0.0782f,  0.1151f, 0.9903f }   // Lateral R
+  {  0.1045f, -0.1564f, 0.9821f },  // Ponta_A
+  {  0.0000f,  0.1736f, 0.9848f },  // Meio (~10° em +Y)
+  { -0.1564f,  0.0000f, 0.9877f }   // Ponta_B
 };
 
 // --- Pinos (SafeAlert MVP: evoluir para I2C + TCA9548A) ---

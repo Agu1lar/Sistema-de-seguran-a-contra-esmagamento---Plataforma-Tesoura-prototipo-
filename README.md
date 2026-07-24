@@ -24,8 +24,8 @@ Requisitos: Blender 4.x / 5.x recomendado.
 |------|-----------|
 | Máquina de referência | Skyjack SJIII 3226 (dimensões oficiais) |
 | Problema | Risco de esmagamento contra teto/viga na elevação |
-| Escopo de cobertura (MVP) | **Só o deck principal (fixo)** — extensão roll-out fora do FoV |
-| Desafio central | Geometria do FoV e cobertura do volume do cesto principal |
+| Escopo de cobertura (MVP) | **Volume total do cesto** (fixo + ponta; Ponta_B na extensão) |
+| Desafio central | Geometria do FoV e cobertura da verticalidade do cesto |
 | Sensores (comparativo 3D) | Ultrassônico (lóbulo) × ToF VL53L1X (~27°) |
 | Controle (MVP) | ESP32-S3 + 3× VL53L1X + TCA9548A |
 | Atuação | LEDs, buzzer e relé (bloqueio só em colisão iminente ~0,60 m) |
@@ -40,36 +40,38 @@ Requisitos: Blender 4.x / 5.x recomendado.
 
 Com a montagem no **alto do cesto** (e não no piso), o feixe olha para o espaço **acima** da plataforma. O operador e as ferramentas dentro do cesto ficam, em regra, **fora** do volume de leitura — isso reduz (não elimina) o problema de falso positivo por ocupação do cesto.
 
-### Deck extensível — fora do escopo do MVP
+### Deck extensível — Ponta_B vai junto (com cabo em folga)
 
 A SJIII 3226 tem **roll-out** em **+X** (`Extension_Deck`: X ≈ 0,105…1,015 m).  
-O MVP cobre **só o retângulo do deck FIXO** (X ≈ −1,015…0,05 m).
+A disposição é a **original do projeto**: cobertura do **volume total** do cesto (verticalidade). O sensor da ponta dianteira fica na peça extensível e **anda com ela**.
 
 | Decisão | Motivo |
 |---------|--------|
-| Sensores nos **3 cantos do retângulo fixo** | Cobertura do volume fixo; montagem em postes/cantos |
-| Nenhum sensor em `X ≥ 0,105` | Extender o deck **não move** hardware |
-| Cabo com **laço de folga** | Folga mecânica no harness |
-| Envelope em `config.h` até `EXTENSAO_X_INICIO_M` | Hit acima da extensão → `FORA_ESCOPO` |
+| **Ponta_A + Meio** no deck fixo | Cobertura traseira / meio do volume |
+| **Ponta_B** parented em `Extension_Deck` | Mantém cobertura da ponta quando o roll-out abre |
+| Cabo da Ponta_B com **laço de folga ≥ ~0,9 m** | Extensão não estica / não rompe o harness |
+| Envelope em `config.h` no comprimento **total** | Hit acima de todo o cesto entra no escopo |
 
-**Disposição canônica** (`config.h` = fonte da verdade):
+**Disposição canônica** (`config.h` = fonte da verdade; poses = extensão **recolhida**):
 
 ```text
         +Y
          ^
-  TL ●─────┐
-     │ tras.│     ║ limiar X=0,105 → EXTENSÃO (sem sensor)
-  TR ●──●──┘ LR
-     X=-1,015  X=-0,53
+  PA ●─────────────┐
+     │   volume    │  ║ limiar X=0,105
+     │   do cesto  │──● PB  (na Extension_Deck)
+     └──────●──────┘
+          Meio (-Y)
+     X=-1,015          X=+1,015
 ```
 
-| ID | Onde | Pose (m) |
-|----|------|----------|
-| `SENSOR_TRASEIRA_L` | Canto traseiro +Y | `(-1,015, +0,355, 2,16)` |
-| `SENSOR_TRASEIRA_R` | Canto traseiro −Y | `(-1,015, −0,355, 2,16)` |
-| `SENSOR_LATERAL_R` | Poste rail −Y (terço traseiro) | `(-0,533, −0,355, 2,16)` |
+| ID | Onde | Pose stowed (m) | Montagem |
+|----|------|-----------------|----------|
+| `SENSOR_PONTA_A` | Canto traseiro +Y | `(-1,015, +0,355, 2,16)` | Deck **fixo** |
+| `SENSOR_MEIO` | Meio do comprimento, rail −Y | `(0,000, −0,355, 2,16)` | Deck **fixo** |
+| `SENSOR_PONTA_B` | Ponta dianteira | `(+1,015, 0,000, 2,16)` | **`Extension_Deck`** + cabo folga |
 
-Todos com `X ≤ -0,50` — **nada no limiar** da extensão. Rebuild: `scripts/rebuild_sensor_corners.py`
+Rebuild: `scripts/rebuild_sensor_corners.py`
 
 ---
 
@@ -139,7 +141,7 @@ Sensor 1D só devolve distância. Perto de um prédio, o FoV pode “raspar” a
 **Solução no projeto**
 - pontos de impacto \(h_i\) fora de \(V_{\text{colisão}}\) → `FORA_ESCOPO`  
 - plano vertical ou \(\Delta r \approx 0\) com subida → `PAREDE`  
-- montagem com FoV para cima nos **cantos** do rail fixo (~9° ao centro do deck principal)
+- montagem com FoV para cima nos **pontos originais** do rail (convergência / cobertura do volume)
 
 ### 2) Operador e ferramentas dentro do cesto
 
@@ -153,15 +155,15 @@ Braço/ferramenta no FoV pode parecer obstáculo.
 
 ### 3) Cobertura do volume do cesto
 
-**Disposição:** 3 sensores só na **traseira** do deck fixo (longe do limiar da extensão):
+**Disposição original** (3 sensores cobrindo o comprimento do cesto; Ponta_B na extensão):
 
-| Sensor | Onde | Pose `(X, Y, Z)` m |
-|--------|------|-------------------|
-| `SENSOR_TRASEIRA_L` | Canto traseiro +Y | `(-1,015, +0,355, 2,16)` |
-| `SENSOR_TRASEIRA_R` | Canto traseiro −Y | `(-1,015, −0,355, 2,16)` |
-| `SENSOR_LATERAL_R` | Poste rail −Y | `(-0,533, −0,355, 2,16)` |
+| Sensor | Onde | Pose stowed `(X, Y, Z)` m |
+|--------|------|---------------------------|
+| `SENSOR_PONTA_A` | Canto traseiro +Y (fixo) | `(-1,015, +0,355, 2,16)` |
+| `SENSOR_MEIO` | Meio, rail −Y (fixo) | `(0,000, −0,355, 2,16)` |
+| `SENSOR_PONTA_B` | Ponta dianteira (**extensão**) | `(+1,015, 0,000, 2,16)` |
 
-Apontamento: ~8° ao centro da zona traseira. Script: `scripts/rebuild_sensor_corners.py`.
+Apontamento: aims originais (convergência / cobertura). Script: `scripts/rebuild_sensor_corners.py`.
 
 ### 4) Ultrassônico × ToF
 
@@ -194,13 +196,19 @@ ESP32-S3 + TCA9548A + 3× VL53L1X + LEDs/buzzer/relé — ver SafeAlert MVP.
 
 ![SafeAlert MVP — arranjo na protoboard](images/safealert_mvp_protoboard.png)
 
-### Instalação no cesto (Blender)
+### Instalação no cesto (exemplo)
 
-Caixa IP65 aberta junto ao painel de controle, com protoboard + ESP32 + TCA9548A + relé/LEDs; cabos Cat ao longo do top rail até os 3 ToF; capuzes anti-sol/poeira nos sensores. Coleção Blender: `Instalacao_MVP_ToF` (câmera `Cam_MVP_Install`).
+Uma **possível** montagem (há várias outras válidas). Disposição dos 3 ToF no topo do guarda-corpo — a mesma do modelo / `config.h`:
 
-![Instalação MVP no cesto](images/mvp_instalacao_cesto.png)
+| Sensor | Onde | Pose stowed (m) |
+|--------|------|-----------------|
+| **Ponta_A** | canto traseiro, rail +Y (fixo) | `(-1,015, +0,355, 2,16)` |
+| **Meio** | meio do comprimento, rail −Y (fixo) | `(0,000, −0,355, 2,16)` |
+| **Ponta_B** | ponta dianteira na **extensão** | `(+1,015, 0,000, 2,16)` |
 
-![Instalação MVP — vista geral](images/mvp_instalacao_geral.png)
+Caixa IP65 junto ao painel; cabos pelo **exterior** do top rail; Ponta_B com laço de folga. Coleção: `Instalacao_MVP_ToF`.
+
+![Exemplo de instalação MVP no cesto — Ponta_A / Meio / Ponta_B](images/mvp_instalacao_cesto.png)
 
 ---
 
@@ -214,11 +222,11 @@ O diagrama *“SafeAlert MVP — Arranjo Fictício na Protoboard”* está **con
 |-------|-----------|
 | **ESP32-S3 DevKit** | Adequado como controlador do MVP |
 | **TCA9548A** | Solução correta: os 3× VL53L1X compartilham o mesmo endereço I2C |
-| **S1 / S2 / S3** (traseira fixa) | Traseira L/R + Lateral R — longe da extensão |
+| **S1 / S2 / S3** (volume total) | Ponta_A + Meio (fixo) + Ponta_B (na extensão, cabo folga) |
 | **3V3 para mux/sensores e 5V para buzzer/relé** | Separação de trilhos coerente |
 | **LEDs (verde / amarelo / vermelho / azul)** + **220 Ω** | Indicadores de estado claros para demonstração |
 | **Buzzer via 2N2222 + 1 kΩ** | Evita sobrecarregar o GPIO do ESP32 |
-| **Relé com contatos secos** | Boa escolha para *simular* bloqueio de subida sem amarrar ainda no circuito da máquina |
+| **Relé com contatos secos** | Interface **funcional** na máquina: contato em série no comando de **subida** (ensaio). Protótipo ≠ produto certificado |
 | **Botões ACK e Teste diário** | Úteis em protótipo de segurança (reconhecimento / autoteste) |
 | **GND comum** entre 3V3 e 5V | Obrigatório — o diagrama prevê barramentos compartilhados |
 
@@ -312,7 +320,7 @@ O **ESP fica em caixa protegida perto do painel de controle no cesto**; os 3 ToF
 | 1 | ESP32-S3 DevKitC (N8R2 ou N16R8, USB-C) | Controle | 70–95 |
 | 3 | VL53L1X (módulo breakout) | Sensores ToF | 75–120 |
 | 1 | TCA9548A (mux I2C 8 canais) | 3 sensores no mesmo endereço | 15–25 |
-| 1 | Módulo relé 1 canal 5 V (com opto) | Simular bloqueio de subida (contatos secos) | 10–18 |
+| 1 | Módulo relé 1 canal 5 V (opto + bornes) | Cortar contato da **subida** na máquina (teste funcional) | 10–25 |
 | 1 | Buzzer ativo 5 V | Alarme sonoro | 3–8 |
 | 2 | Transistor NPN 2N2222 (ou BC547) | Driver do buzzer (+ reserva) | 1–3 |
 | 1 | Kit resistores (220 Ω, 1 kΩ, 10 kΩ) | LEDs, base do transistor, pull-ups | 8–15 |
@@ -366,10 +374,11 @@ Se estourar o teto: use **ESP32-WROOM-32 DevKit** (~R$ 35–50) no lugar do S3.
            |
     ┌──────┼──────────────┐
   ToF S1          ToF S2          ToF S3
-  Traseira L      Traseira R      Lateral R (poste)
+  Ponta_A         Meio            Ponta_B (na extensão)
+  (deck fixo)     (deck fixo)     + laço de folga ≥ ~0,9 m
 ```
 
-**Notas:** I2C não gosta de cabo longo — use Cat6, clock baixo (~50 kHz) e GND comum 3V3/5V. O firmware atual ainda lê HC-SR04 por GPIO; a porta para VL53L1X+TCA9548A está no roadmap. Cabos só no rail do **deck fixo**, com **laço de folga** — estender o roll-out não puxa a instalação MVP.
+**Notas:** I2C não gosta de cabo longo — use Cat6, clock baixo (~50 kHz) e GND comum 3V3/5V. O firmware atual ainda lê HC-SR04 por GPIO; a porta para VL53L1X+TCA9548A está no roadmap. O cabo da **Ponta_B** precisa de **laço de folga** no limiar fixo/extensão para o roll-out não puxar o harness.
 
 ---
 
@@ -383,7 +392,7 @@ Se estourar o teto: use **ESP32-WROOM-32 DevKit** (~R$ 35–50) no lugar do S3.
 | Largura | 0,81 m |
 | Altura (guarda-corpos erguidos) | 2,15 m |
 | Plataforma interna | 2,13 × 0,71 m |
-| Extensão roll-out (ref.) | ~0,9 m em +X — **fora do FoV no MVP** |
+| Extensão roll-out (ref.) | ~0,9 m em +X — **Ponta_B vai junto** (cabo folga) |
 | Altura do piso do cesto | 1,14 m |
 | Distância entre eixos | 1,75 m |
 
@@ -396,8 +405,8 @@ Se estourar o teto: use **ESP32-WROOM-32 DevKit** (~R$ 35–50) no lugar do S3.
 | `SJIII_3226_ToF` | **Clone** da plataforma para comparativo |
 | `Sensores_ToF` | Módulos ToF (VL53L1X) e cones ópticos |
 | `SJIII_3226_ROOT` / `SJIII_3226_ToF_ROOT` | Empties-raiz (mover o conjunto inteiro) |
-| `Zona_Extensao` | Marcação âmbar do roll-out (**sem** sensores) |
-| `Instalacao_MVP_ToF` | Caixa IP65, cabos e capuzes (só rail fixo) |
+| `Zona_Extensao` | Marcação âmbar do roll-out (**Ponta_B** montada aí) |
+| `Instalacao_MVP_ToF` | Caixa IP65, cabos (incl. folga da ponta) e capuzes |
 
 ### Representação dos volumes no 3D
 
@@ -411,9 +420,10 @@ Se estourar o teto: use **ESP32-WROOM-32 DevKit** (~R$ 35–50) no lugar do S3.
 | `Volume_ToF_Vermelho_*` | **1,2 m** | vermelho | aperto + buzzer — ainda sobe |
 | `Volume_ToF_Bloqueio_*` | **0,6 m** | azul | **bloqueio** (iminente) |
 
-Empties (traseira fixa, `X ≤ -0,50`):
+Empties (disposição original):
 
-- `corner` = `Traseira_L` | `Traseira_R` | `Lateral_R`
+- `corner` = `Ponta_A` | `Meio` | `Ponta_B_Ext`
+- `on_extension` = true só em `Ponta_B_Ext` (parent = `Extension_Deck` / clone ToF)
 
 ---
 
@@ -472,8 +482,7 @@ Histerese de liberação: **0,75 m** (`DIST_LIBERA_BLOQUEIO_M`).
 │   ├── tof_detalhe_cesto.png
 │   ├── comparativo_us_tof.png
 │   ├── safealert_mvp_protoboard.png
-│   ├── mvp_instalacao_cesto.png
-│   └── mvp_instalacao_geral.png
+│   └── mvp_instalacao_cesto.png
 └── esp32_anti_esmagamento/
     ├── esp32_anti_esmagamento.ino
     ├── config.h
@@ -508,7 +517,7 @@ Histerese de liberação: **0,75 m** (`DIST_LIBERA_BLOQUEIO_M`).
 - [ ] Ensaios sob **sol direto** vs sombra: status/ambient do VL53L1X, alcance útil real, capuz mecânico (± filtro 940 nm externo como experimento)  
 - [ ] Housing + cover glass nos ToF; ensaio **poeira na janela** / gotas; checklist de limpeza no teste diário  
 - [ ] Multilateração só para alvos pontuais compartilhados (opcional)  
-- [ ] *(Produto, fora do MVP)* Sensor na extensão + cabo com folga; ou interlock quando roll-out aberto  
+- [ ] Validar laço de folga da Ponta_B no roll-out (~0,9 m) e pose dinâmica no firmware se extensão aberta  
 - [ ] *(Produto, fora do MVP)* Esboço de arquitetura dual-channel + isolamento na interface de bloqueio; mapear requisitos EN 280 / ISO 13849
 
 ---
